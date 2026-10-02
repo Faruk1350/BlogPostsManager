@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Blog Posts Manager</title>
+
+    <style>
+        body {
+            font-family: Arial;
+            background: #f4f4f4;
+            margin: 0;
+        }
+
+        .container {
+            width: 70%;
+            margin: 30px auto;
+        }
+
+        .header {
+            background: #333;
+            color: white;
+            padding: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logout {
+            background: #e74c3c;
+            color: white;
+            padding: 10px 15px;
+            text-decoration: none;
+        }
+
+        .box {
+            background: white;
+            padding: 25px;
+            margin-top: 20px;
+        }
+
+        input, textarea {
+            width: 100%;
+            padding: 12px;
+            margin: 10px 0;
+            box-sizing: border-box;
+        }
+
+        button {
+            padding: 12px 20px;
+            background: #333;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+
+        .post {
+            background: white;
+            padding: 20px;
+            margin-top: 15px;
+            border-left: 5px solid #333;
+        }
+
+        .author {
+            color: #777;
+            font-size: 14px;
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="container">
+
+    <div class="header">
+
+        <div>
+            <h2>Blog Posts Manager</h2>
+            Welcome, {{ user }} 👋
+        </div>
+
+        <a class="logout" href="/logout">
+            Logout
+        </a>
+
+    </div>
+
+
+    <div class="box">
+
+        <h2>Add New Post</h2>
+
+        <form id="postForm">
+
+            <input
+                type="text"
+                id="title"
+                placeholder="Enter title"
+                required
+            >
+
+            <textarea
+                id="content"
+                placeholder="Enter content"
+                rows="5"
+                required
+            ></textarea>
+
+            <button type="submit">
+                Add Post
+            </button>
+
+        </form>
+
+    </div>
+
+
+    <div class="box">
+
+        <h2>All Posts</h2>
+
+        <div id="posts">
+
+            {% for post in posts %}
+
+            <div class="post">
+
+                <h3>{{ post.title }}</h3>
+
+                <p>{{ post.content }}</p>
+
+                <div class="author">
+                    Posted by: {{ post.author }}
+                </div>
+
+            </div>
+
+            {% endfor %}
+
+        </div>
+
+    </div>
+
+</div>
+
+
+<script>
+
+document.getElementById("postForm").addEventListener("submit", async function(event) {
+
+    event.preventDefault();
+
+    const title = document.getElementById("title").value;
+    const content = document.getElementById("content").value;
+
+    const response = await fetch("/items", {
+
+        method: "POST",
+
+        headers: {
+            "Content-Type": "application/json"
+        },
+
+        body: JSON.stringify({
+            title: title,
+            content: content
+        })
+
+    });
+
+    if (response.ok) {
+
+        location.reload();
+
+    } else {
+
+        alert("Please login first!");
+
+    }
+
+});
+
+</script>
+
+</body>
+</html>
