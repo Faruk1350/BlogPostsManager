@@ -1,5 +1,5 @@
 import React from "react";
-import { Feather, Search, Plus, Database, Settings, LogOut, LogIn } from "lucide-react";
+import { Feather, Search, Plus, Settings, LogOut, LogIn } from "lucide-react";
 
 import { useAuth } from "../lib/auth";
 
@@ -11,7 +11,6 @@ export default function Navbar({
   onOpenSettings,
   onSignIn,
   onLogout,
-  dbStatus,
 }) {
   const { profile, isAuthenticated, isAdmin } = useAuth();
 
@@ -40,14 +39,6 @@ export default function Navbar({
 
         {/* Actions */}
         <div className="nav-actions">
-          <div
-            className={`status-badge ${dbStatus.connected ? "supabase" : "local"}`}
-            title={dbStatus.connected ? "Connected to Supabase PostgreSQL" : "Local database"}
-          >
-            <span className="status-dot" />
-            <span>{dbStatus.connected ? "Supabase" : "Local DB"}</span>
-          </div>
-
           {isAuthenticated && (
             <button className="btn-primary" onClick={onOpenCreate}>
               <Plus size={16} strokeWidth={2.5} />

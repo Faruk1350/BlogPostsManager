@@ -33,7 +33,6 @@ export default function App() {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [sortOption, setSortOption] = useState("recent");
-  const [dbStatus, setDbStatus] = useState({ connected: false, database: "local" });
 
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [editingPost, setEditingPost] = useState(null);
@@ -79,12 +78,6 @@ export default function App() {
   );
 
   // ---------------- initial data ----------------
-  useEffect(() => {
-    api("/api/health")
-      .then((data) => setDbStatus({ connected: data.supabase_connected, database: data.database }))
-      .catch(() => {});
-  }, []);
-
   // Apply the user's preferred default sort once preferences load.
   useEffect(() => {
     if (preferences?.default_sort) setSortOption(preferences.default_sort);
@@ -247,7 +240,6 @@ export default function App() {
         onOpenSettings={() => navigate("settings")}
         onSignIn={() => navigate("login")}
         onLogout={handleSignOut}
-        dbStatus={dbStatus}
       />
 
       <main className="main-content">
