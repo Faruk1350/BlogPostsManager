@@ -46,15 +46,6 @@ def refresh_post_count() -> None:
         logger.debug("post count refresh failed", exc_info=True)
 
 
-def _liked_post_ids(user_id: str) -> set:
-    try:
-        result = _db().table("likes").select("post_id").eq("user_id", user_id).execute()
-        return {row["post_id"] for row in (result.data or [])}
-    except Exception:
-        logger.debug("like lookup failed", exc_info=True)
-        return set()
-
-
 def calculate_read_time(content: str) -> str:
     words = len(content.split())
     minutes = max(1, math.ceil(words / 180))
@@ -75,9 +66,13 @@ def get_posts(
     sort: str = "recent",
     current_user_id: str = "user_admin",
 ) -> List[Dict[str, Any]]:
-    """Return posts with optional search, category filter and sorting."""
+    """Return posts with optional search, category filter and sorting.
+
+    Likes are embedded in the same PostgREST call, so listing posts costs a
+    single database round-trip instead of one per concern.
+    """
     try:
-        query = _db().table("posts").select("*")
+        query = _db().table("posts").select("*, likes(user_id)")
 
         if category and category.lower() != "all":
             query = query.eq("category", category)
@@ -90,11 +85,10 @@ def get_posts(
         query = query.order("likes_count" if sort == "likes" else "created_at", desc=True)
         posts = query.execute().data or []
 
-        liked = _liked_post_ids(current_user_id)
         for post in posts:
-            post["is_liked"] = post["id"] in liked
+            likes = post.pop("likes", None) or []
+            post["is_liked"] = any(like.get("user_id") == current_user_id for like in likes)
 
-        refresh_post_count()
         return posts
     except DatabaseUnavailable:
         raise
@@ -105,13 +99,18 @@ def get_posts(
 def get_post_by_id(post_id: int, current_user_id: str = "user_admin") -> Optional[Dict[str, Any]]:
     try:
         result = (
-            _db().table("posts").select("*").eq("id", post_id).limit(1).execute()
+            _db()
+            .table("posts")
+            .select("*, likes(user_id)")
+            .eq("id", post_id)
+            .limit(1)
+            .execute()
         )
         if not result.data:
             return None
         post = result.data[0]
-        liked = _liked_post_ids(current_user_id)
-        post["is_liked"] = post["id"] in liked
+        likes = post.pop("likes", None) or []
+        post["is_liked"] = any(like.get("user_id") == current_user_id for like in likes)
         return post
     except DatabaseUnavailable:
         raise

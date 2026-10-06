@@ -29,6 +29,7 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [allProfiles, setAllProfiles] = useState([]);
   const [dbStatus, setDbStatus] = useState({ connected: false, database: "local" });
+  const [initialized, setInitialized] = useState(false);
 
   // Modals & Overlays
   const [createModalOpen, setCreateModalOpen] = useState(false);
@@ -47,12 +48,15 @@ export default function App() {
     }, 3200);
   }, []);
 
-  // 1. Initial Load: Check DB status & profiles
+  // 1. Initial Load: DB status & profiles (fetched in parallel to save a round-trip)
   useEffect(() => {
     const initApp = async () => {
       try {
-        // Health check
-        const healthRes = await fetch("/api/health");
+        const [healthRes, profilesRes] = await Promise.all([
+          fetch("/api/health"),
+          fetch("/api/profiles"),
+        ]);
+
         if (healthRes.ok) {
           const healthData = await healthRes.json();
           setDbStatus({
@@ -61,8 +65,6 @@ export default function App() {
           });
         }
 
-        // Fetch profiles
-        const profilesRes = await fetch("/api/profiles");
         if (profilesRes.ok) {
           const profilesData = await profilesRes.json();
           setAllProfiles(profilesData);
@@ -72,6 +74,8 @@ export default function App() {
         }
       } catch (err) {
         console.error("Initialization error:", err);
+      } finally {
+        setInitialized(true);
       }
     };
 
@@ -109,8 +113,11 @@ export default function App() {
   }, [searchTerm, selectedCategory, sortOption, currentUser]);
 
   useEffect(() => {
+    // Wait for profiles so the first request already carries the right user id
+    // (avoids a duplicate, wasted posts fetch on startup).
+    if (!initialized) return;
     fetchPosts();
-  }, [fetchPosts]);
+  }, [initialized, fetchPosts]);
 
   // 3. Actions
   const handleToggleLike = async (postId) => {

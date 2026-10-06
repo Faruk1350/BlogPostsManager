@@ -1,5 +1,11 @@
 apiVersion: 1
 
+# One-time cleanup: the Alertmanager datasource type is not supported by
+# Grafana 13 and was removed from this file.
+deleteDatasources:
+  - name: Alertmanager
+    orgId: 1
+
 datasources:
   - name: Prometheus
     uid: prometheus

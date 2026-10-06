@@ -50,6 +50,25 @@ app.add_middleware(
 )
 
 
+# ---------------- Cache headers ----------------
+# Hashed build assets can be cached forever (at the Cloudflare edge and in the
+# browser); HTML must always be revalidated so a deploy can never leave users
+# on a stale index.html referencing old assets.
+@app.middleware("http")
+async def cache_control(request: Request, call_next):
+    response = await call_next(request)
+    path = request.url.path
+
+    if path.startswith("/assets/"):
+        response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    elif path.startswith("/uploads/"):
+        response.headers["Cache-Control"] = "public, max-age=86400"
+    elif path == "/" or path.endswith(".html"):
+        response.headers["Cache-Control"] = "no-cache"
+
+    return response
+
+
 # ---------------- Error handling ----------------
 @app.exception_handler(DatabaseUnavailable)
 async def database_unavailable_handler(request: Request, exc: DatabaseUnavailable):
