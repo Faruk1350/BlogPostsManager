@@ -319,36 +319,12 @@ def delete_comment(comment_id: int) -> bool:
 # Profiles
 # --------------------------------------------------------------------------
 
-def _profile_with_stats(profile: Dict[str, Any], post_stats: Dict[str, Dict[str, int]]) -> Dict[str, Any]:
-    stats = post_stats.get(profile["id"], {})
-    profile = dict(profile)
-    profile["posts_count"] = stats.get("posts_count", 0)
-    profile["likes_received"] = stats.get("likes_received", 0)
-    return profile
-
-
-def _post_stats_by_author() -> Dict[str, Dict[str, int]]:
-    stats: Dict[str, Dict[str, int]] = {}
-    try:
-        result = _db().table("posts").select("author_id,likes_count").execute()
-    except Exception as exc:
-        raise _fail("Loading profile stats", exc) from exc
-
-    for row in result.data or []:
-        author_id = row.get("author_id")
-        if not author_id:
-            continue
-        entry = stats.setdefault(author_id, {"posts_count": 0, "likes_received": 0})
-        entry["posts_count"] += 1
-        entry["likes_received"] += row.get("likes_count") or 0
-    return stats
-
-
 def get_profile(identifier: str) -> Optional[Dict[str, Any]]:
+    """Single round-trip: the profile_stats view computes post/like totals."""
     try:
         result = (
             _db()
-            .table("profiles")
+            .table("profile_stats")
             .select("*")
             .or_(f"id.eq.{identifier},username.eq.{identifier}")
             .limit(1)
@@ -359,21 +335,18 @@ def get_profile(identifier: str) -> Optional[Dict[str, Any]]:
     except Exception as exc:
         raise _fail("Loading profile", exc) from exc
 
-    if not result.data:
-        return None
-    return _profile_with_stats(result.data[0], _post_stats_by_author())
+    return result.data[0] if result.data else None
 
 
 def get_all_profiles() -> List[Dict[str, Any]]:
     try:
-        result = _db().table("profiles").select("*").execute()
+        result = _db().table("profile_stats").select("*").execute()
     except DatabaseUnavailable:
         raise
     except Exception as exc:
         raise _fail("Loading profiles", exc) from exc
 
-    stats = _post_stats_by_author()
-    return [_profile_with_stats(profile, stats) for profile in (result.data or [])]
+    return result.data or []
 
 
 def update_profile(profile_id: str, updates: Dict[str, Any]) -> Dict[str, Any]:
