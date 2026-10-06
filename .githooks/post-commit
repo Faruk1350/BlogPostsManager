@@ -7,7 +7,7 @@ root="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
 cd "$root" || exit 0
 
 changed="$(git diff-tree --no-commit-id --name-only -r HEAD 2>/dev/null || true)"
-echo "$changed" | grep -qE '^(app\.py|requirements\.txt|Dockerfile|docker-compose\.yml|\.dockerignore|observability/|scripts/)' || exit 0
+echo "$changed" | grep -qE '^(app\.py|requirements\.txt|Dockerfile|docker-compose\.yml|\.dockerignore|backend/|frontend/|observability/|scripts/|\.githooks/)' || exit 0
 
 echo "[auto-deploy] deploy-relevant changes committed — starting pipeline in background"
 echo "[auto-deploy] log: .pipeline/deploy-*.log"
