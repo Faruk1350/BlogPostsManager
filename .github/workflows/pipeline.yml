@@ -1,0 +1,52 @@
+name: Pipeline
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Run tests
+        env:
+          # Add these as repository secrets to run the full data test-suite
+          # against Supabase. Without them, data tests are skipped.
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: pytest -q
+
+  build:
+    name: Build container image
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - name: Runtime image (includes frontend build)
+        run: docker build --target runtime -t "blog-app:${GITHUB_SHA::7}" .
+
+  # Deployment is intentionally LOCAL for this project:
+  #   - `make deploy` runs the full test -> build -> deploy -> healthcheck pipeline
+  #   - git hooks (.githooks/) auto-deploy on commit/merge
+  #
+  # To also deploy from CI, register a self-hosted runner on the deployment
+  # machine and uncomment the job below.
+  #
+  # deploy:
+  #   name: Deploy (self-hosted)
+  #   runs-on: self-hosted
+  #   needs: build
+  #   if: github.ref == 'refs/heads/main'
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - run: ./scripts/deploy.sh

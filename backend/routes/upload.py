@@ -1,8 +1,11 @@
 import os
-import uuid
 import shutil
+import uuid
 from pathlib import Path
-from fastapi import APIRouter, UploadFile, File, HTTPException
+
+from fastapi import APIRouter, File, HTTPException, UploadFile
+
+from backend import metrics
 
 upload_router = APIRouter(prefix="/api", tags=["Uploads"])
 
@@ -31,6 +34,7 @@ async def upload_file(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=f"Failed to save file: {str(e)}")
 
     file_url = f"/uploads/{unique_filename}"
+    metrics.upload_events.inc()
     return {
         "url": file_url,
         "filename": unique_filename,

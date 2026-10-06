@@ -1,0 +1,29 @@
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: local-webhook
+  group_by: [alertname, severity, service]
+  group_wait: 10s
+  group_interval: 1m
+  repeat_interval: 4h
+  routes:
+    - matchers:
+        - severity="critical"
+      receiver: local-webhook
+      repeat_interval: 1h
+
+inhibit_rules:
+  # If the app is fully down, don't also scream about latency/error rates.
+  - source_matchers: [alertname="AppDown"]
+    target_matchers: [severity=~"warning|info", service="blog-app"]
+    equal: []
+  # A dead host makes container-level noise meaningless.
+  - source_matchers: [alertname="HostDown"]
+    target_matchers: [severity=~"warning|info", service="containers"]
+
+receivers:
+  - name: local-webhook
+    webhook_configs:
+      - url: http://alert-webhook:9099/alerts
+        send_resolved: true

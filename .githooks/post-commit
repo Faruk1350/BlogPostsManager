@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Auto-deploy hook: runs after every local commit.
+# Disable per-commit with SKIP_AUTODEPLOY=1, or globally with `make hooks-uninstall`.
+[ "${SKIP_AUTODEPLOY:-0}" = "1" ] && exit 0
+
+root="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
+cd "$root" || exit 0
+
+changed="$(git diff-tree --no-commit-id --name-only -r HEAD 2>/dev/null || true)"
+echo "$changed" | grep -qE '^(app\.py|requirements\.txt|Dockerfile|docker-compose\.yml|\.dockerignore|observability/|scripts/)' || exit 0
+
+echo "[auto-deploy] deploy-relevant changes committed — starting pipeline in background"
+echo "[auto-deploy] log: .pipeline/deploy-*.log"
+nohup scripts/deploy.sh >/dev/null 2>&1 &

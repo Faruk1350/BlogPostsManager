@@ -1,0 +1,14 @@
+:9094 {
+	# Health endpoint stays unauthenticated so blackbox can probe it through the tunnel.
+	handle /-/healthy* {
+		reverse_proxy alertmanager:9093
+	}
+
+	# Everything else (UI + API) requires basic auth.
+	handle {
+		basicauth {
+			{$ALERTMANAGER_AUTH_USER} {$ALERTMANAGER_AUTH_HASH}
+		}
+		reverse_proxy alertmanager:9093
+	}
+}

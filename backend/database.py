@@ -1,502 +1,402 @@
+"""Supabase-backed data access layer.
+
+Every read and write goes to the Supabase Postgres database. There is no local
+seed data and no silent in-memory fallback: when the database cannot be reached
+the API fails loudly with a 503 instead of serving stale data.
+"""
+
+import logging
 import math
 from datetime import datetime, timezone
-from typing import Optional, List, Dict, Any
-from backend.supabase_client import supabase, is_supabase_configured
+from typing import Any, Dict, List, Optional
 
-# ---------------- Initial In-Memory / Local Seed Data ----------------
-LOCAL_PROFILES: Dict[str, Dict[str, Any]] = {
-    "user_admin": {
-        "id": "user_admin",
-        "username": "faruk_dev",
-        "display_name": "Faruk Developer",
-        "email": "faruk@example.com",
-        "bio": "DevOps engineer & full-stack architect passionate about clean code, high-throughput systems, and minimalist aesthetics.",
-        "avatar_url": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80",
-        "cover_image_url": "https://images.unsplash.com/photo-1579546929518-9e396f3cc809?w=1200&auto=format&fit=crop&q=80",
-        "website": "https://github.com/Faruk1350",
-        "location": "San Francisco, CA",
-        "created_at": "2026-01-15T10:00:00Z"
-    },
-    "user_sarah": {
-        "id": "user_sarah",
-        "username": "sarah_design",
-        "display_name": "Sarah Chen",
-        "email": "sarah@example.com",
-        "bio": "Product designer & typography obsessive. Crafting intuitive design systems and modern web experiences.",
-        "avatar_url": "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=200&auto=format&fit=crop&q=80",
-        "cover_image_url": "https://images.unsplash.com/photo-1557683316-973673baf926?w=1200&auto=format&fit=crop&q=80",
-        "website": "https://sarahchen.design",
-        "location": "Toronto, ON",
-        "created_at": "2026-02-01T12:00:00Z"
-    },
-    "user_alex": {
-        "id": "user_alex",
-        "username": "alex_ross",
-        "display_name": "Alex Ross",
-        "email": "alex@example.com",
-        "bio": "Cloud architect & technical writer. Exploring serverless edge computing and asynchronous frameworks.",
-        "avatar_url": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&auto=format&fit=crop&q=80",
-        "cover_image_url": "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=1200&auto=format&fit=crop&q=80",
-        "website": "https://alexross.tech",
-        "location": "London, UK",
-        "created_at": "2026-02-10T14:30:00Z"
-    }
-}
+from backend import metrics
+from backend.supabase_client import is_supabase_configured, supabase
 
-LOCAL_POSTS: List[Dict[str, Any]] = [
-    {
-        "id": 1,
-        "title": "Minimalist Design in Digital Interfaces",
-        "content": "Minimalism is not the lack of something; it is simply the perfect amount of everything. When crafting software interfaces, eliminating unnecessary visual noise and focusing on clear typographic hierarchy allows users to focus on what matters most.\n\nKey principles for modern minimalism:\n- Intentional whitespace provides breathing room.\n- Subtle, soft tonal contrasts replace harsh borders.\n- Micro-interactions acknowledge user action without distraction.\n- Harmonious color palettes evoke tranquility and trust.",
-        "cover_image": "https://images.unsplash.com/photo-1499750310107-5fef28a66643?w=1200&auto=format&fit=crop&q=80",
-        "category": "Design",
-        "author_id": "user_sarah",
-        "author_name": "Sarah Chen",
-        "author_avatar": "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=200&auto=format&fit=crop&q=80",
-        "read_time": "3 min read",
-        "likes_count": 28,
-        "comments_count": 3,
-        "shares_count": 9,
-        "created_at": "2026-10-04T09:15:00Z"
-    },
-    {
-        "id": 2,
-        "title": "Why FastAPI is the Future of Python Backends",
-        "content": "Transitioning from traditional synchronous frameworks like Flask to FastAPI unlocks massive concurrency and developer ergonomics. With native async/await support, Pydantic type validation, and automatic OpenAPI schema generation, FastAPI delivers industry-leading performance out of the box.\n\nHighlights:\n- Asynchronous ASGI execution powered by Starlette and Uvicorn.\n- Zero boilerplate input parsing and validation.\n- Interactive documentation with Swagger UI and ReDoc.\n- Seamless pairing with modern database clients like Supabase.",
-        "cover_image": "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=1200&auto=format&fit=crop&q=80",
-        "category": "Engineering",
-        "author_id": "user_admin",
-        "author_name": "Faruk Developer",
-        "author_avatar": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80",
-        "read_time": "4 min read",
-        "likes_count": 42,
-        "comments_count": 2,
-        "shares_count": 14,
-        "created_at": "2026-10-05T14:20:00Z"
-    },
-    {
-        "id": 3,
-        "title": "Architecting Cloud-Native Workflows with Supabase",
-        "content": "PostgreSQL has stood the test of time as one of the most reliable and extensible database engines in computer science. Supabase brings PostgreSQL to the modern developer with instant REST APIs, WebSocket real-time updates, built-in row-level security (RLS), and unified storage.\n\nBy leveraging Supabase alongside modern lightweight web frontends, teams can build reactive, scalable applications in record time without managing complex database clusters.",
-        "cover_image": "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=1200&auto=format&fit=crop&q=80",
-        "category": "Database",
-        "author_id": "user_alex",
-        "author_name": "Alex Ross",
-        "author_avatar": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&auto=format&fit=crop&q=80",
-        "read_time": "5 min read",
-        "likes_count": 35,
-        "comments_count": 2,
-        "shares_count": 11,
-        "created_at": "2026-10-06T06:30:00Z"
-    }
-]
+logger = logging.getLogger("blog.database")
 
-LOCAL_COMMENTS: List[Dict[str, Any]] = [
-    {
-        "id": 1,
-        "post_id": 1,
-        "author_id": "user_admin",
-        "author_name": "Faruk Developer",
-        "author_avatar": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80",
-        "content": "This emphasis on typography and calm palettes makes reading so effortless. Beautifully articulated!",
-        "created_at": "2026-10-04T10:00:00Z"
-    },
-    {
-        "id": 2,
-        "post_id": 1,
-        "author_id": "user_alex",
-        "author_name": "Alex Ross",
-        "author_avatar": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&auto=format&fit=crop&q=80",
-        "content": "Whitespace is truly the most underrated design tool. Excited to apply these guidelines in our next release.",
-        "created_at": "2026-10-04T12:30:00Z"
-    },
-    {
-        "id": 3,
-        "post_id": 1,
-        "author_id": "user_sarah",
-        "author_name": "Sarah Chen",
-        "author_avatar": "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=200&auto=format&fit=crop&q=80",
-        "content": "Thank you both! Always happy to see teams adopting calmer digital experiences.",
-        "created_at": "2026-10-04T13:45:00Z"
-    },
-    {
-        "id": 4,
-        "post_id": 2,
-        "author_id": "user_sarah",
-        "author_name": "Sarah Chen",
-        "author_avatar": "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=200&auto=format&fit=crop&q=80",
-        "content": "The automatic interactive OpenAPI docs make client integration an absolute breeze.",
-        "created_at": "2026-10-05T15:10:00Z"
-    },
-    {
-        "id": 5,
-        "post_id": 2,
-        "author_id": "user_alex",
-        "author_name": "Alex Ross",
-        "author_avatar": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&auto=format&fit=crop&q=80",
-        "content": "Pydantic v2 core speed improvements give FastAPI an incredible boost.",
-        "created_at": "2026-10-05T16:20:00Z"
-    },
-    {
-        "id": 6,
-        "post_id": 3,
-        "author_id": "user_admin",
-        "author_name": "Faruk Developer",
-        "author_avatar": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80",
-        "content": "PostgreSQL row-level security paired with Supabase Auth completely simplifies backend authorization rules.",
-        "created_at": "2026-10-06T07:15:00Z"
-    },
-    {
-        "id": 7,
-        "post_id": 3,
-        "author_id": "user_sarah",
-        "author_name": "Sarah Chen",
-        "author_avatar": "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=200&auto=format&fit=crop&q=80",
-        "content": "Great architectural summary!",
-        "created_at": "2026-10-06T08:00:00Z"
-    }
-]
 
-# Track likes locally: set of (post_id, user_id)
-LOCAL_LIKES = {
-    (1, "user_admin"),
-    (2, "user_admin"),
-    (2, "user_sarah"),
-    (3, "user_admin")
-}
+class DatabaseUnavailable(RuntimeError):
+    """Raised when Supabase is not configured or cannot be reached."""
 
-# Track shares count
-LOCAL_SHARES = []
+
+# --------------------------------------------------------------------------
+# Internal helpers
+# --------------------------------------------------------------------------
+
+def _db():
+    if not is_supabase_configured():
+        raise DatabaseUnavailable(
+            "Database not configured: set SUPABASE_URL and SUPABASE_KEY"
+        )
+    return supabase
+
+
+def _fail(action: str, exc: Exception) -> DatabaseUnavailable:
+    logger.error("%s failed: %s", action, exc)
+    return DatabaseUnavailable(f"{action} failed: {exc}")
+
+
+def _refresh_post_count() -> None:
+    """Keep the posts gauge in sync. Metrics must never break a request."""
+    try:
+        result = _db().table("posts").select("id", count="exact").execute()
+        metrics.posts_gauge.set(result.count or 0)
+    except Exception:
+        logger.debug("post count refresh failed", exc_info=True)
+
+
+def _liked_post_ids(user_id: str) -> set:
+    try:
+        result = _db().table("likes").select("post_id").eq("user_id", user_id).execute()
+        return {row["post_id"] for row in (result.data or [])}
+    except Exception:
+        logger.debug("like lookup failed", exc_info=True)
+        return set()
+
 
 def calculate_read_time(content: str) -> str:
     words = len(content.split())
     minutes = max(1, math.ceil(words / 180))
     return f"{minutes} min read"
 
-# ----------------- Database Service Layer -----------------
 
-def get_posts(search: Optional[str] = None, category: Optional[str] = None, sort: str = "recent", current_user_id: str = "user_admin") -> List[Dict[str, Any]]:
-    if is_supabase_configured():
-        try:
-            query = supabase.table("posts").select("*")
-            if category and category.lower() != "all":
-                query = query.eq("category", category)
-            if search:
-                query = query.ilike("title", f"%{search}%")
-            
-            if sort == "likes":
-                query = query.order("likes_count", desc=True)
-            else:
-                query = query.order("created_at", desc=True)
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
-            res = query.execute()
-            posts_data = res.data or []
-            
-            # Check user liked status
-            liked_post_ids = set()
-            try:
-                likes_res = supabase.table("likes").select("post_id").eq("user_id", current_user_id).execute()
-                liked_post_ids = {item["post_id"] for item in (likes_res.data or [])}
-            except Exception:
-                pass
 
-            for post in posts_data:
-                post["is_liked"] = post["id"] in liked_post_ids
+# --------------------------------------------------------------------------
+# Posts
+# --------------------------------------------------------------------------
 
-            return posts_data
-        except Exception as e:
-            # Fallback to local store if Supabase request fails
-            pass
+def get_posts(
+    search: Optional[str] = None,
+    category: Optional[str] = None,
+    sort: str = "recent",
+    current_user_id: str = "user_admin",
+) -> List[Dict[str, Any]]:
+    """Return posts with optional search, category filter and sorting."""
+    try:
+        query = _db().table("posts").select("*")
 
-    # Local fallback
-    filtered = list(LOCAL_POSTS)
-    if category and category.lower() != "all":
-        filtered = [p for p in filtered if p.get("category", "").lower() == category.lower()]
-    if search:
-        s = search.lower()
-        filtered = [p for p in filtered if s in p.get("title", "").lower() or s in p.get("content", "").lower() or s in p.get("author_name", "").lower()]
-    
-    if sort == "likes":
-        filtered.sort(key=lambda p: p.get("likes_count", 0), reverse=True)
-    else:
-        filtered.sort(key=lambda p: p.get("created_at", ""), reverse=True)
+        if category and category.lower() != "all":
+            query = query.eq("category", category)
+        if search:
+            term = search.replace(",", "").replace("*", "")
+            query = query.or_(
+                f"title.ilike.*{term}*,content.ilike.*{term}*,author_name.ilike.*{term}*"
+            )
 
-    result = []
-    for p in filtered:
-        item = dict(p)
-        item["is_liked"] = (p["id"], current_user_id) in LOCAL_LIKES
-        result.append(item)
-    return result
+        query = query.order("likes_count" if sort == "likes" else "created_at", desc=True)
+        posts = query.execute().data or []
+
+        liked = _liked_post_ids(current_user_id)
+        for post in posts:
+            post["is_liked"] = post["id"] in liked
+
+        _refresh_post_count()
+        return posts
+    except DatabaseUnavailable:
+        raise
+    except Exception as exc:
+        raise _fail("Loading posts", exc) from exc
+
 
 def get_post_by_id(post_id: int, current_user_id: str = "user_admin") -> Optional[Dict[str, Any]]:
-    if is_supabase_configured():
-        try:
-            res = supabase.table("posts").select("*").eq("id", post_id).single().execute()
-            if res.data:
-                post = res.data
-                likes_res = supabase.table("likes").select("id").eq("post_id", post_id).eq("user_id", current_user_id).execute()
-                post["is_liked"] = bool(likes_res.data)
-                return post
-        except Exception:
-            pass
+    try:
+        result = (
+            _db().table("posts").select("*").eq("id", post_id).limit(1).execute()
+        )
+        if not result.data:
+            return None
+        post = result.data[0]
+        liked = _liked_post_ids(current_user_id)
+        post["is_liked"] = post["id"] in liked
+        return post
+    except DatabaseUnavailable:
+        raise
+    except Exception as exc:
+        raise _fail("Loading post", exc) from exc
 
-    for p in LOCAL_POSTS:
-        if p["id"] == post_id:
-            item = dict(p)
-            item["is_liked"] = (post_id, current_user_id) in LOCAL_LIKES
-            return item
-    return None
 
 def create_post(data: Dict[str, Any]) -> Dict[str, Any]:
-    read_time = calculate_read_time(data.get("content", ""))
-    now_iso = datetime.now(timezone.utc).isoformat()
-    
-    author_id = data.get("author_id", "user_admin")
-    author_profile = get_profile(author_id)
-    author_name = data.get("author_name") or (author_profile["display_name"] if author_profile else "Anonymous")
-    author_avatar = data.get("author_avatar") or (author_profile.get("avatar_url") if author_profile else None)
+    author_id = data.get("author_id") or "user_admin"
+    profile = get_profile(author_id) or {}
 
-    new_post_payload = {
+    payload = {
         "title": data["title"],
         "content": data["content"],
         "cover_image": data.get("cover_image"),
-        "category": data.get("category", "General"),
+        "category": data.get("category") or "General",
         "author_id": author_id,
-        "author_name": author_name,
-        "author_avatar": author_avatar,
-        "read_time": read_time,
+        "author_name": data.get("author_name") or profile.get("display_name") or "Anonymous",
+        "author_avatar": data.get("author_avatar") or profile.get("avatar_url"),
+        "read_time": calculate_read_time(data.get("content", "")),
         "likes_count": 0,
         "comments_count": 0,
         "shares_count": 0,
-        "created_at": now_iso
+        "created_at": _now(),
     }
 
-    if is_supabase_configured():
-        try:
-            res = supabase.table("posts").insert(new_post_payload).execute()
-            if res.data:
-                created = res.data[0]
-                created["is_liked"] = False
-                return created
-        except Exception:
-            pass
+    try:
+        result = _db().table("posts").insert(payload).execute()
+    except DatabaseUnavailable:
+        raise
+    except Exception as exc:
+        raise _fail("Creating post", exc) from exc
 
-    new_id = (max([p["id"] for p in LOCAL_POSTS], default=0)) + 1
-    new_post_payload["id"] = new_id
-    LOCAL_POSTS.insert(0, new_post_payload)
-    item = dict(new_post_payload)
-    item["is_liked"] = False
-    return item
+    if not result.data:
+        raise DatabaseUnavailable("Creating post failed: insert returned no data")
+
+    post = result.data[0]
+    post["is_liked"] = False
+    logger.info("post_created id=%s title=%s author=%s", post["id"], post["title"], post["author_name"])
+    metrics.post_events.labels(action="created").inc()
+    _refresh_post_count()
+    return post
+
 
 def delete_post(post_id: int) -> bool:
-    if is_supabase_configured():
-        try:
-            supabase.table("posts").delete().eq("id", post_id).execute()
-            return True
-        except Exception:
-            pass
+    try:
+        result = _db().table("posts").delete().eq("id", post_id).execute()
+    except DatabaseUnavailable:
+        raise
+    except Exception as exc:
+        raise _fail("Deleting post", exc) from exc
 
-    global LOCAL_POSTS
-    orig_len = len(LOCAL_POSTS)
-    LOCAL_POSTS = [p for p in LOCAL_POSTS if p["id"] != post_id]
-    return len(LOCAL_POSTS) < orig_len
+    if not result.data:
+        return False
+
+    logger.info("post_deleted id=%s", post_id)
+    metrics.post_events.labels(action="deleted").inc()
+    _refresh_post_count()
+    return True
+
+
+# --------------------------------------------------------------------------
+# Likes
+# --------------------------------------------------------------------------
 
 def toggle_like(post_id: int, user_id: str) -> Dict[str, Any]:
-    if is_supabase_configured():
-        try:
-            # Check existing like
-            check = supabase.table("likes").select("id").eq("post_id", post_id).eq("user_id", user_id).execute()
-            if check.data and len(check.data) > 0:
-                # Unlike
-                supabase.table("likes").delete().eq("post_id", post_id).eq("user_id", user_id).execute()
-                # Decrement like count
-                post_res = supabase.table("posts").select("likes_count").eq("id", post_id).single().execute()
-                curr_likes = max(0, (post_res.data.get("likes_count") or 1) - 1)
-                supabase.table("posts").update({"likes_count": curr_likes}).eq("id", post_id).execute()
-                return {"post_id": post_id, "liked": False, "likes_count": curr_likes}
-            else:
-                # Like
-                supabase.table("likes").insert({"post_id": post_id, "user_id": user_id}).execute()
-                post_res = supabase.table("posts").select("likes_count").eq("id", post_id).single().execute()
-                curr_likes = (post_res.data.get("likes_count") or 0) + 1
-                supabase.table("posts").update({"likes_count": curr_likes}).eq("id", post_id).execute()
-                return {"post_id": post_id, "liked": True, "likes_count": curr_likes}
-        except Exception:
-            pass
+    db = _db()
+    try:
+        existing = (
+            db.table("likes").select("id").eq("post_id", post_id).eq("user_id", user_id).execute()
+        )
+        if existing.data:
+            db.table("likes").delete().eq("post_id", post_id).eq("user_id", user_id).execute()
+            action = "unlike"
+        else:
+            db.table("likes").insert({"post_id": post_id, "user_id": user_id}).execute()
+            action = "like"
 
-    key = (post_id, user_id)
-    post = next((p for p in LOCAL_POSTS if p["id"] == post_id), None)
-    if not post:
-        return {"post_id": post_id, "liked": False, "likes_count": 0}
+        count_result = (
+            db.table("likes").select("id", count="exact").eq("post_id", post_id).execute()
+        )
+        likes_count = count_result.count or 0
+        db.table("posts").update({"likes_count": likes_count}).eq("id", post_id).execute()
+    except DatabaseUnavailable:
+        raise
+    except Exception as exc:
+        raise _fail("Toggling like", exc) from exc
 
-    if key in LOCAL_LIKES:
-        LOCAL_LIKES.remove(key)
-        post["likes_count"] = max(0, post["likes_count"] - 1)
-        liked = False
-    else:
-        LOCAL_LIKES.add(key)
-        post["likes_count"] += 1
-        liked = True
+    logger.info("like_%s post_id=%s user_id=%s likes_count=%s", action, post_id, user_id, likes_count)
+    metrics.like_events.labels(action=action).inc()
+    return {"post_id": post_id, "liked": action == "like", "likes_count": likes_count}
 
-    return {"post_id": post_id, "liked": liked, "likes_count": post["likes_count"]}
+
+# --------------------------------------------------------------------------
+# Shares
+# --------------------------------------------------------------------------
 
 def record_share(post_id: int, platform: str, user_id: str) -> Dict[str, Any]:
-    if is_supabase_configured():
-        try:
-            supabase.table("shares").insert({
-                "post_id": post_id,
-                "platform": platform,
-                "user_id": user_id
-            }).execute()
-            post_res = supabase.table("posts").select("shares_count").eq("id", post_id).single().execute()
-            curr_shares = (post_res.data.get("shares_count") or 0) + 1
-            supabase.table("posts").update({"shares_count": curr_shares}).eq("id", post_id).execute()
-            return {"post_id": post_id, "platform": platform, "shares_count": curr_shares, "share_url": f"/post/{post_id}"}
-        except Exception:
-            pass
+    db = _db()
+    try:
+        db.table("shares").insert(
+            {"post_id": post_id, "platform": platform, "user_id": user_id}
+        ).execute()
+        count_result = (
+            db.table("shares").select("id", count="exact").eq("post_id", post_id).execute()
+        )
+        shares_count = count_result.count or 0
+        db.table("posts").update({"shares_count": shares_count}).eq("id", post_id).execute()
+    except DatabaseUnavailable:
+        raise
+    except Exception as exc:
+        raise _fail("Recording share", exc) from exc
 
-    post = next((p for p in LOCAL_POSTS if p["id"] == post_id), None)
-    curr_shares = 1
-    if post:
-        post["shares_count"] = post.get("shares_count", 0) + 1
-        curr_shares = post["shares_count"]
-
-    LOCAL_SHARES.append({
+    logger.info("share_recorded post_id=%s platform=%s user_id=%s", post_id, platform, user_id)
+    metrics.share_events.inc()
+    return {
         "post_id": post_id,
         "platform": platform,
-        "user_id": user_id,
-        "created_at": datetime.now(timezone.utc).isoformat()
-    })
-    return {"post_id": post_id, "platform": platform, "shares_count": curr_shares, "share_url": f"/post/{post_id}"}
+        "shares_count": shares_count,
+        "share_url": f"/post/{post_id}",
+    }
+
+
+# --------------------------------------------------------------------------
+# Comments
+# --------------------------------------------------------------------------
 
 def get_comments(post_id: int) -> List[Dict[str, Any]]:
-    if is_supabase_configured():
-        try:
-            res = supabase.table("comments").select("*").eq("post_id", post_id).order("created_at", desc=False).execute()
-            return res.data or []
-        except Exception:
-            pass
+    try:
+        result = (
+            _db()
+            .table("comments")
+            .select("*")
+            .eq("post_id", post_id)
+            .order("created_at", desc=False)
+            .execute()
+        )
+        return result.data or []
+    except DatabaseUnavailable:
+        raise
+    except Exception as exc:
+        raise _fail("Loading comments", exc) from exc
 
-    return [c for c in LOCAL_COMMENTS if c["post_id"] == post_id]
+
+def _refresh_comment_count(db, post_id: int) -> int:
+    count_result = (
+        db.table("comments").select("id", count="exact").eq("post_id", post_id).execute()
+    )
+    comments_count = count_result.count or 0
+    db.table("posts").update({"comments_count": comments_count}).eq("id", post_id).execute()
+    return comments_count
+
 
 def add_comment(post_id: int, comment_data: Dict[str, Any]) -> Dict[str, Any]:
-    author_id = comment_data.get("author_id", "user_admin")
-    profile = get_profile(author_id)
-    author_name = comment_data.get("author_name") or (profile["display_name"] if profile else "Reader")
-    author_avatar = comment_data.get("author_avatar") or (profile.get("avatar_url") if profile else None)
+    db = _db()
+    author_id = comment_data.get("author_id") or "user_admin"
+    profile = get_profile(author_id) or {}
 
     payload = {
         "post_id": post_id,
         "author_id": author_id,
-        "author_name": author_name,
-        "author_avatar": author_avatar,
+        "author_name": comment_data.get("author_name") or profile.get("display_name") or "Reader",
+        "author_avatar": comment_data.get("author_avatar") or profile.get("avatar_url"),
         "content": comment_data["content"],
-        "created_at": datetime.now(timezone.utc).isoformat()
+        "created_at": _now(),
     }
 
-    if is_supabase_configured():
-        try:
-            res = supabase.table("comments").insert(payload).execute()
-            # update post comments count
-            post_res = supabase.table("posts").select("comments_count").eq("id", post_id).single().execute()
-            cnt = (post_res.data.get("comments_count") or 0) + 1
-            supabase.table("posts").update({"comments_count": cnt}).eq("id", post_id).execute()
-            return res.data[0]
-        except Exception:
-            pass
+    try:
+        result = db.table("comments").insert(payload).execute()
+        if not result.data:
+            raise DatabaseUnavailable("Adding comment failed: insert returned no data")
+        comments_count = _refresh_comment_count(db, post_id)
+    except DatabaseUnavailable:
+        raise
+    except Exception as exc:
+        raise _fail("Adding comment", exc) from exc
 
-    new_id = (max([c["id"] for c in LOCAL_COMMENTS], default=0)) + 1
-    payload["id"] = new_id
-    LOCAL_COMMENTS.append(payload)
+    logger.info("comment_created id=%s post_id=%s author=%s", result.data[0]["id"], post_id, payload["author_name"])
+    metrics.comment_events.labels(action="created").inc()
+    comment = result.data[0]
+    comment["comments_count"] = comments_count
+    return comment
 
-    post = next((p for p in LOCAL_POSTS if p["id"] == post_id), None)
-    if post:
-        post["comments_count"] = post.get("comments_count", 0) + 1
-
-    return payload
 
 def delete_comment(comment_id: int) -> bool:
-    if is_supabase_configured():
-        try:
-            supabase.table("comments").delete().eq("id", comment_id).execute()
-            return True
-        except Exception:
-            pass
+    db = _db()
+    try:
+        existing = db.table("comments").select("id,post_id").eq("id", comment_id).limit(1).execute()
+        if not existing.data:
+            return False
 
-    global LOCAL_COMMENTS
-    comment = next((c for c in LOCAL_COMMENTS if c["id"] == comment_id), None)
-    if comment:
-        post = next((p for p in LOCAL_POSTS if p["id"] == comment["post_id"]), None)
-        if post:
-            post["comments_count"] = max(0, post.get("comments_count", 1) - 1)
-        LOCAL_COMMENTS = [c for c in LOCAL_COMMENTS if c["id"] != comment_id]
-        return True
-    return False
+        post_id = existing.data[0]["post_id"]
+        db.table("comments").delete().eq("id", comment_id).execute()
+        _refresh_comment_count(db, post_id)
+    except DatabaseUnavailable:
+        raise
+    except Exception as exc:
+        raise _fail("Deleting comment", exc) from exc
+
+    logger.info("comment_deleted id=%s post_id=%s", comment_id, post_id)
+    metrics.comment_events.labels(action="deleted").inc()
+    return True
+
+
+# --------------------------------------------------------------------------
+# Profiles
+# --------------------------------------------------------------------------
+
+def _profile_with_stats(profile: Dict[str, Any], post_stats: Dict[str, Dict[str, int]]) -> Dict[str, Any]:
+    stats = post_stats.get(profile["id"], {})
+    profile = dict(profile)
+    profile["posts_count"] = stats.get("posts_count", 0)
+    profile["likes_received"] = stats.get("likes_received", 0)
+    return profile
+
+
+def _post_stats_by_author() -> Dict[str, Dict[str, int]]:
+    stats: Dict[str, Dict[str, int]] = {}
+    try:
+        result = _db().table("posts").select("author_id,likes_count").execute()
+    except Exception as exc:
+        raise _fail("Loading profile stats", exc) from exc
+
+    for row in result.data or []:
+        author_id = row.get("author_id")
+        if not author_id:
+            continue
+        entry = stats.setdefault(author_id, {"posts_count": 0, "likes_received": 0})
+        entry["posts_count"] += 1
+        entry["likes_received"] += row.get("likes_count") or 0
+    return stats
+
 
 def get_profile(identifier: str) -> Optional[Dict[str, Any]]:
-    if is_supabase_configured():
-        try:
-            res = supabase.table("profiles").select("*").or_(f"id.eq.{identifier},username.eq.{identifier}").execute()
-            if res.data and len(res.data) > 0:
-                profile = res.data[0]
-                # calculate stats
-                posts_res = supabase.table("posts").select("id,likes_count").eq("author_id", profile["id"]).execute()
-                user_posts = posts_res.data or []
-                profile["posts_count"] = len(user_posts)
-                profile["likes_received"] = sum(p.get("likes_count", 0) for p in user_posts)
-                return profile
-        except Exception:
-            pass
+    try:
+        result = (
+            _db()
+            .table("profiles")
+            .select("*")
+            .or_(f"id.eq.{identifier},username.eq.{identifier}")
+            .limit(1)
+            .execute()
+        )
+    except DatabaseUnavailable:
+        raise
+    except Exception as exc:
+        raise _fail("Loading profile", exc) from exc
 
-    # Search local
-    for profile in LOCAL_PROFILES.values():
-        if profile["id"] == identifier or profile["username"] == identifier:
-            result = dict(profile)
-            user_posts = [p for p in LOCAL_POSTS if p.get("author_id") == profile["id"]]
-            result["posts_count"] = len(user_posts)
-            result["likes_received"] = sum(p.get("likes_count", 0) for p in user_posts)
-            return result
-    return None
+    if not result.data:
+        return None
+    return _profile_with_stats(result.data[0], _post_stats_by_author())
 
-def update_profile(profile_id: str, updates: Dict[str, Any]) -> Dict[str, Any]:
-    cleaned = {k: v for k, v in updates.items() if v is not None}
-    
-    if is_supabase_configured():
-        try:
-            res = supabase.table("profiles").update(cleaned).eq("id", profile_id).execute()
-            if res.data:
-                return get_profile(profile_id)
-        except Exception:
-            pass
-
-    if profile_id in LOCAL_PROFILES:
-        LOCAL_PROFILES[profile_id].update(cleaned)
-        # Also update author_name and author_avatar on existing posts/comments for consistency
-        new_name = cleaned.get("display_name")
-        new_avatar = cleaned.get("avatar_url")
-        for p in LOCAL_POSTS:
-            if p.get("author_id") == profile_id:
-                if new_name:
-                    p["author_name"] = new_name
-                if new_avatar is not None:
-                    p["author_avatar"] = new_avatar
-        for c in LOCAL_COMMENTS:
-            if c.get("author_id") == profile_id:
-                if new_name:
-                    c["author_name"] = new_name
-                if new_avatar is not None:
-                    c["author_avatar"] = new_avatar
-
-        return get_profile(profile_id)
-    return {}
 
 def get_all_profiles() -> List[Dict[str, Any]]:
-    if is_supabase_configured():
-        try:
-            res = supabase.table("profiles").select("*").execute()
-            if res.data:
-                return [get_profile(p["id"]) for p in res.data]
-        except Exception:
-            pass
+    try:
+        result = _db().table("profiles").select("*").execute()
+    except DatabaseUnavailable:
+        raise
+    except Exception as exc:
+        raise _fail("Loading profiles", exc) from exc
 
-    return [get_profile(pid) for pid in LOCAL_PROFILES.keys()]
+    stats = _post_stats_by_author()
+    return [_profile_with_stats(profile, stats) for profile in (result.data or [])]
+
+
+def update_profile(profile_id: str, updates: Dict[str, Any]) -> Dict[str, Any]:
+    cleaned = {key: value for key, value in updates.items() if value is not None}
+    db = _db()
+
+    try:
+        if cleaned:
+            db.table("profiles").update(cleaned).eq("id", profile_id).execute()
+
+        # Keep denormalised author fields in sync for existing content.
+        if cleaned.get("display_name"):
+            db.table("posts").update({"author_name": cleaned["display_name"]}).eq("author_id", profile_id).execute()
+            db.table("comments").update({"author_name": cleaned["display_name"]}).eq("author_id", profile_id).execute()
+        if cleaned.get("avatar_url"):
+            db.table("posts").update({"author_avatar": cleaned["avatar_url"]}).eq("author_id", profile_id).execute()
+            db.table("comments").update({"author_avatar": cleaned["avatar_url"]}).eq("author_id", profile_id).execute()
+    except DatabaseUnavailable:
+        raise
+    except Exception as exc:
+        raise _fail("Updating profile", exc) from exc
+
+    logger.info("profile_updated id=%s fields=%s", profile_id, ",".join(cleaned.keys()))
+    metrics.profile_events.inc()
+    return get_profile(profile_id)

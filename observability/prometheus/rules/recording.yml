@@ -1,0 +1,42 @@
+groups:
+  - name: blog-app.recording
+    interval: 15s
+    rules:
+      - record: job:blog_app_requests:rate5m
+        expr: sum(rate(http_requests_total{job="blog-app"}[5m]))
+
+      - record: job:blog_app_errors:rate5m
+        expr: sum(rate(http_requests_total{job="blog-app",status=~"5.."}[5m]))
+
+      - record: job:blog_app_error_ratio:5m
+        expr: job:blog_app_errors:rate5m / clamp_min(job:blog_app_requests:rate5m, 0.001)
+
+      - record: job:blog_app_latency_p50:5m
+        expr: histogram_quantile(0.50, sum by (le) (rate(http_request_duration_seconds_bucket{job="blog-app"}[5m])))
+
+      - record: job:blog_app_latency_p95:5m
+        expr: histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket{job="blog-app"}[5m])))
+
+      - record: job:blog_app_latency_p99:5m
+        expr: histogram_quantile(0.99, sum by (le) (rate(http_request_duration_seconds_bucket{job="blog-app"}[5m])))
+
+  - name: host.recording
+    interval: 15s
+    rules:
+      - record: instance:node_cpu_utilisation:rate5m
+        expr: 100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)
+
+      - record: instance:node_memory_utilisation:ratio
+        expr: 1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)
+
+      - record: instance:node_filesystem_utilisation:ratio
+        expr: |
+          1 - (
+            max by (instance, mountpoint) (
+              node_filesystem_avail_bytes{fstype!~"tmpfs|overlay|ramfs|autofs|devfs|squashfs"}
+            )
+            /
+            max by (instance, mountpoint) (
+              node_filesystem_size_bytes{fstype!~"tmpfs|overlay|ramfs|autofs|devfs|squashfs"}
+            )
+          )
