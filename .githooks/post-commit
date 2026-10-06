@@ -11,4 +11,10 @@ echo "$changed" | grep -qE '^(app\.py|requirements\.txt|Dockerfile|docker-compos
 
 echo "[auto-deploy] deploy-relevant changes committed — starting pipeline in background"
 echo "[auto-deploy] log: .pipeline/deploy-*.log"
-nohup scripts/deploy.sh >/dev/null 2>&1 &
+
+# Run under launchd so the deploy survives this shell/terminal or process-group
+# cleanup (a plain nohup child dies with the session's process group).
+LABEL="com.tavesglobal.blog-deploy"
+launchctl remove "$LABEL" >/dev/null 2>&1 || true
+launchctl submit -l "$LABEL" -- /bin/bash -lc "cd '$root' && exec ./scripts/deploy.sh" >/dev/null 2>&1 \
+  || nohup scripts/deploy.sh >/dev/null 2>&1 &
