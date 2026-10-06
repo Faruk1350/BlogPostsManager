@@ -125,7 +125,7 @@ export default function ProfileModal({
         >
           <button
             className="close-btn"
-            style={{ backgroundColor: "rgba(255, 255, 255, 0.9)" }}
+            style={{ backgroundColor: "var(--bg-elevated-strong)" }}
             onClick={onClose}
           >
             <X size={18} />
@@ -349,7 +349,7 @@ export default function ProfileModal({
                           alignItems: "center",
                           justifyContent: "space-between",
                           padding: "0.85rem 1rem",
-                          backgroundColor: "#ffffff",
+                          backgroundColor: "var(--bg-surface)",
                           border: "1px solid var(--border-subtle)",
                           borderRadius: "var(--radius-md)",
                           cursor: "pointer"
@@ -381,7 +381,7 @@ export default function ProfileModal({
                         alignItems: "center",
                         justifyContent: "space-between",
                         padding: "0.85rem 1rem",
-                        backgroundColor: "#ffffff",
+                        backgroundColor: "var(--bg-surface)",
                         border: "1px solid var(--border-subtle)",
                         borderRadius: "var(--radius-md)",
                         cursor: "pointer"

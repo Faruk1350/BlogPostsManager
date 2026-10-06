@@ -12,7 +12,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from backend import metrics
+from backend import embeddings, metrics
 from backend.supabase_client import is_supabase_configured, supabase
 
 logger = logging.getLogger("blog.database")
@@ -79,6 +79,61 @@ def _now() -> str:
 # Posts
 # --------------------------------------------------------------------------
 
+def _apply_embedding(payload: Dict[str, Any], title: str, content: str) -> None:
+    """Attach a semantic embedding to a post payload when the model is available."""
+    vectors = embeddings.embed_documents([embeddings.document_text(title, content)])
+    if vectors:
+        payload["embedding"] = embeddings.to_sql_vector(vectors[0])
+        metrics.embedding_status.set(1)
+        metrics.embedding_events.labels(operation="embedded").inc()
+    else:
+        metrics.embedding_status.set(0)
+
+
+def backfill_embeddings(limit: int = 200) -> int:
+    """Compute embeddings for posts missing one (startup + after model installs)."""
+    if not embeddings.available():
+        metrics.embedding_status.set(0)
+        return 0
+
+    try:
+        result = (
+            _db()
+            .table("posts")
+            .select("id,title,content")
+            .is_("embedding", "null")
+            .limit(limit)
+            .execute()
+        )
+        rows = result.data or []
+        if not rows:
+            metrics.embedding_status.set(1)
+            return 0
+
+        vectors = embeddings.embed_documents(
+            [embeddings.document_text(row["title"], row["content"]) for row in rows]
+        )
+        if not vectors:
+            metrics.embedding_status.set(0)
+            return 0
+
+        updated = 0
+        for row, vector in zip(rows, vectors):
+            _db().table("posts").update(
+                {"embedding": embeddings.to_sql_vector(vector)}
+            ).eq("id", row["id"]).execute()
+            updated += 1
+
+        logger.info("embeddings_backfilled count=%s", updated)
+        metrics.embedding_status.set(1)
+        metrics.embedding_events.labels(operation="backfilled").inc(updated)
+        return updated
+    except Exception as exc:
+        logger.warning("embedding backfill failed: %s", exc)
+        metrics.embedding_status.set(0)
+        return 0
+
+
 def _liked_post_ids(user_id: Optional[str]) -> set:
     if not user_id:
         return set()
@@ -111,7 +166,7 @@ def get_posts(
     offset = max(0, offset)
 
     if q:
-        return _search_posts(q, current_user_id, limit, offset)
+        return _hybrid_search(q, current_user_id, limit, offset)
 
     try:
         query = _db().table("posts").select("*, likes(user_id)")
@@ -145,6 +200,59 @@ def get_posts(
         raise
     except Exception as exc:
         raise _fail("Loading posts", exc) from exc
+
+
+def _semantic_search(
+    query: str, current_user_id: Optional[str], limit: int, offset: int
+) -> List[Dict[str, Any]]:
+    vector = embeddings.embed_query(query)
+    if not vector:
+        return []
+
+    try:
+        result = _db().rpc(
+            "semantic_search",
+            {
+                "p_query_embedding": embeddings.to_sql_vector(vector),
+                "p_limit": limit,
+                "p_offset": offset,
+                "p_min_similarity": 0.3,
+            },
+        ).execute()
+    except Exception as exc:
+        logger.warning("semantic search failed: %s", exc)
+        return []
+
+    posts = result.data or []
+    liked = _liked_post_ids(current_user_id)
+    for post in posts:
+        post.pop("similarity", None)
+        post["is_liked"] = post["id"] in liked
+    return posts
+
+
+def _hybrid_search(
+    query: str, current_user_id: Optional[str], limit: int, offset: int
+) -> List[Dict[str, Any]]:
+    """Exact keyword hits first, semantic (vector) matches filling the rest.
+
+    Lexical matches are the strongest signal when a query contains a rare or
+    quoted term; embeddings pick up meaning when words alone find nothing
+    (e.g. "marine mammals" -> a post about whales).
+    """
+    text = _search_posts(query, current_user_id, limit, offset)
+    semantic = _semantic_search(query, current_user_id, limit, offset)
+
+    seen = set()
+    merged: List[Dict[str, Any]] = []
+    for post in text + semantic:
+        if post["id"] in seen:
+            continue
+        seen.add(post["id"])
+        merged.append(post)
+        if len(merged) >= limit:
+            break
+    return merged
 
 
 def _search_posts(q: str, current_user_id: Optional[str], limit: int, offset: int) -> List[Dict[str, Any]]:
@@ -270,6 +378,7 @@ def create_post(data: Dict[str, Any]) -> Dict[str, Any]:
         "created_at": now,
         "updated_at": now,
     }
+    _apply_embedding(payload, data["title"], data["content"])
 
     try:
         result = _db().table("posts").insert(payload).execute()
@@ -300,6 +409,17 @@ def update_post(post_id: int, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         updates["slug"] = _unique_slug(updates["title"])
     if not updates:
         return get_post_by_id(post_id)
+
+    # Re-embed when the text changes so semantic search stays accurate.
+    if "title" in updates or "content" in updates:
+        current = get_post_by_id(post_id)
+        if current:
+            _apply_embedding(
+                updates,
+                updates.get("title") or current["title"],
+                updates.get("content") or current["content"],
+            )
+
     updates["updated_at"] = _now()
 
     try:

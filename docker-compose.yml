@@ -27,6 +27,7 @@ services:
     volumes:
       - logs:/var/log/blog
       - uploads:/app/backend/uploads
+      - models:/app/.models
     deploy:
       resources:
         limits:
@@ -206,6 +207,7 @@ services:
 volumes:
   logs:
   uploads:
+  models:
   prometheus-data:
   grafana-data:
   loki-data:

@@ -113,7 +113,7 @@ export default function PostModal({
             <button
               className="close-btn"
               title="Edit story"
-              style={{ backgroundColor: "rgba(255,255,255,0.9)" }}
+              style={{ backgroundColor: "var(--bg-elevated-strong)" }}
               onClick={() => onEditPost(post)}
             >
               <Pencil size={16} />
@@ -123,7 +123,7 @@ export default function PostModal({
             <button
               className="close-btn"
               title="Delete story"
-              style={{ backgroundColor: "rgba(255,255,255,0.9)" }}
+              style={{ backgroundColor: "var(--bg-elevated-strong)" }}
               onClick={() => onDeletePost(post.id)}
             >
               <Trash2 size={16} />
@@ -131,7 +131,7 @@ export default function PostModal({
           )}
           <button
             className="close-btn"
-            style={{ backgroundColor: "rgba(255, 255, 255, 0.9)" }}
+            style={{ backgroundColor: "var(--bg-elevated-strong)" }}
             onClick={onClose}
           >
             <X size={18} />

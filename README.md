@@ -24,6 +24,17 @@ Features:
 - `backend/` — FastAPI application: routes, models, Supabase service layer
 - `frontend/` — React (Vite) single-page UI, built and served by FastAPI in production
 
+### Search & recommendations
+
+- Search is **semantic**: every post gets a local ONNX text embedding
+  (`fastembed`, bge-small, 384 dims) stored in Postgres via **pgvector**;
+  queries are embedded and matched by cosine similarity, topped up with
+  ranked full-text results (`tsvector`) as a fallback
+- Related stories use vector similarity to the source post
+- The "For you" feed builds a taste centroid from posts you liked/commented
+  on and ranks by vector distance, with category/author affinity as fallback
+- Everything runs locally on CPU — no external embedding API
+
 ### API Endpoints
 
 | Method | Path | Description |
@@ -41,8 +52,8 @@ Features:
 | GET | `/api/posts/{id}` | Fetch one post (increments views) |
 | PUT | `/api/posts/{id}` | Edit a post (author or admin) |
 | DELETE | `/api/posts/{id}` | Delete a post (author or admin) |
-| GET | `/api/posts/{id}/related` | Content-similarity related stories |
-| GET | `/api/feed/recommended` | Personalised feed (trending for anonymous) |
+| GET | `/api/posts/{id}/related` | Related stories (vector similarity) |
+| GET | `/api/feed/recommended` | Personalised feed (taste-vector ranking) |
 | POST | `/api/posts/{id}/like` | Toggle like / unlike (auth) |
 | POST | `/api/posts/{id}/share` | Record a share (auth) |
 | GET | `/api/posts/{id}/comments` | List comments (paginated) |
@@ -80,7 +91,8 @@ SUPABASE_KEY=<service-role-key>     # server-side only, never shipped to the bro
 ## Technologies Used
 
 - Python, FastAPI, Pydantic, Uvicorn
-- Supabase (hosted PostgreSQL + REST)
+- Supabase (hosted PostgreSQL + REST) with pgvector
+- Local semantic embeddings via fastembed (ONNX, CPU)
 - React 19, Vite
 - Pytest, Docker, GitHub Actions
 - Prometheus, Grafana, Loki, Alertmanager (see `OBSERVABILITY.md`)

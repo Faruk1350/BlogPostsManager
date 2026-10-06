@@ -79,7 +79,7 @@ export default function PostCard({
                 title="Edit story"
                 style={{ padding: "0.2rem" }}
               >
-                <Pencil size={14} color="#94a3b8" />
+                <Pencil size={14} />
               </button>
             )}
             {isAuthor && onDeletePost && (
@@ -92,7 +92,7 @@ export default function PostCard({
                 title="Delete story"
                 style={{ padding: "0.2rem" }}
               >
-                <Trash2 size={14} color="#94a3b8" />
+                <Trash2 size={14} />
               </button>
             )}
           </div>

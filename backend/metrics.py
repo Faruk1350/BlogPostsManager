@@ -26,6 +26,10 @@ preference_events = Counter("blog_preference_update_events_total", "Preference u
 # Authentication events by action (signup, login, login_failed, logout, refresh).
 auth_events = Counter("blog_auth_events_total", "Authentication events", ["action"])
 
+# Semantic embeddings (local ONNX model) health and throughput.
+embedding_status = Gauge("blog_embedding_status", "1 when the embedding model is loaded and usable")
+embedding_events = Counter("blog_embedding_events_total", "Embedding operations", ["operation"])
+
 # Instantiate labelled series at zero so dashboards show 0 instead of "No data"
 # before the first event arrives.
 for _action in ("created", "updated", "deleted"):

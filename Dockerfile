@@ -15,7 +15,8 @@ ARG APP_VERSION=dev
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     APP_VERSION=${APP_VERSION} \
-    PORT=5000
+    PORT=5000 \
+    FASTEMBED_CACHE_PATH=/app/.models
 
 WORKDIR /app
 
@@ -23,8 +24,8 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 RUN useradd --system --uid 10001 appuser \
-    && mkdir -p /var/log/blog /app/backend/uploads \
-    && chown -R appuser:appuser /var/log/blog /app/backend/uploads
+    && mkdir -p /var/log/blog /app/backend/uploads /app/.models \
+    && chown -R appuser:appuser /var/log/blog /app/backend/uploads /app/.models
 
 COPY --chown=appuser:appuser app.py ./
 COPY --chown=appuser:appuser backend ./backend

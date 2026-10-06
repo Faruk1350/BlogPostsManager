@@ -1,4 +1,6 @@
+import logging
 import os
+import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -8,7 +10,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from prometheus_fastapi_instrumentator import Instrumentator
 
-from backend import database, metrics
+from backend import database, embeddings, metrics
 from backend.database import DatabaseUnavailable
 from backend.routes.auth import auth_router
 from backend.routes.health import health_router
@@ -16,9 +18,25 @@ from backend.routes.items import posts_router
 from backend.routes.profiles import me_router, profiles_router
 from backend.routes.upload import upload_router
 
+logger = logging.getLogger("blog")
+
 BASE_DIR = Path(__file__).resolve().parent
 FRONTEND_DIST = BASE_DIR.parent / "frontend" / "dist"
 UPLOAD_DIR = BASE_DIR / "uploads"
+
+
+def _warm_embeddings() -> None:
+    """Load the ONNX embedding model and backfill missing vectors.
+
+    Runs in a background thread so startup and requests are never blocked on
+    a model download; search degrades to full-text until it finishes.
+    """
+    try:
+        if not embeddings.warmup():
+            return
+        database.backfill_embeddings()
+    except Exception as exc:  # pragma: no cover - environment dependent
+        logger.warning("embedding warmup failed: %s", exc)
 
 
 @asynccontextmanager
@@ -28,6 +46,7 @@ async def lifespan(app: FastAPI):
         database.refresh_post_count()
     except Exception:
         pass
+    threading.Thread(target=_warm_embeddings, daemon=True).start()
     yield
 
 

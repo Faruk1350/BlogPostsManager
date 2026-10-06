@@ -303,7 +303,7 @@ export default function App() {
 
         {debouncedSearch && tab === "latest" && (
           <div className="search-summary">
-            <Compass size={15} /> Results for “{debouncedSearch}” — {posts.length} found
+            <Compass size={15} /> Semantic matches for “{debouncedSearch}” — {posts.length} found
           </div>
         )}
 

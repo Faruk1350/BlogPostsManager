@@ -18,6 +18,7 @@ from starlette.testclient import TestClient
 
 from app import app
 from backend import database
+from backend import embeddings as embedding_module
 from backend.routes.upload import UPLOAD_DIR
 from backend.security import hash_password
 from backend.supabase_client import is_supabase_configured, supabase
@@ -65,6 +66,11 @@ class TestAuthAndBlog(unittest.TestCase):
             email=cls.email,
         )
         cls.profile_id = cls.profile["id"]
+
+        # Semantic model: warm once and backfill so vector tests are meaningful.
+        cls.semantic = embedding_module.available()
+        if cls.semantic:
+            database.backfill_embeddings()
 
     @classmethod
     def tearDownClass(cls):
@@ -313,7 +319,8 @@ class TestAuthAndBlog(unittest.TestCase):
 
         try:
             results = client.get("/api/posts", params={"q": marker}).json()
-            self.assertEqual(len(results), 1)
+            # Exact keyword match ranks first (semantic matches may follow).
+            self.assertGreaterEqual(len(results), 1)
             self.assertEqual(results[0]["id"], post["id"])
 
             related = client.get("/api/posts/1/related").json()
@@ -323,6 +330,33 @@ class TestAuthAndBlog(unittest.TestCase):
             self.assertGreaterEqual(len(for_auth), 1)
             for_anon = client.get("/api/feed/recommended").json()
             self.assertGreaterEqual(len(for_anon), 1)
+        finally:
+            client.delete(f"/api/posts/{post['id']}", headers=self.auth(token))
+
+    # ---------------- semantic search & embeddings ----------------
+    def test_12_embeddings_are_populated(self):
+        if not self.semantic:
+            self.skipTest("embedding model unavailable in this environment")
+        row = supabase.table("posts").select("id,embedding").eq("id", 1).limit(1).execute()
+        self.assertTrue(row.data)
+        self.assertIsNotNone(row.data[0].get("embedding"))
+
+    def test_13_semantic_search_matches_meaning(self):
+        """A query with no keyword overlap should still find the right post."""
+        if not self.semantic:
+            self.skipTest("embedding model unavailable in this environment")
+
+        token, _ = self.login()
+        post = self.create_post(
+            token,
+            title="Deep Sea Expedition Notes",
+            content="Observations of whales, dolphins, seals and coral reefs during an eight-week Pacific voyage.",
+        )
+        try:
+            # No shared words with the post: text search alone returns nothing.
+            results = client.get("/api/posts", params={"q": "marine mammals in the ocean"}).json()
+            top_ids = [item["id"] for item in results[:5]]
+            self.assertIn(post["id"], top_ids, "semantic search did not surface the marine-life post")
         finally:
             client.delete(f"/api/posts/{post['id']}", headers=self.auth(token))
 
