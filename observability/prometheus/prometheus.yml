@@ -30,7 +30,7 @@ scrape_configs:
     scrape_interval: 30s
     scrape_timeout: 25s
     static_configs:
-      - targets: ["docker-metrics:9417"]
+      - targets: ["host.docker.internal:9417"]
 
   - job_name: cloudflared
     static_configs:

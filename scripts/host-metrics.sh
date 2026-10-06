@@ -42,7 +42,12 @@ case "${1:-status}" in
     echo "[host-metrics] venv ready at $VENV"
     ;;
   up)
-    if is_running && curl -sf -m 3 http://127.0.0.1:9417/metrics >/dev/null 2>&1; then
+    # Already serving (launchd agent or an ad-hoc run from a previous shell).
+    if curl -sf -m 3 http://127.0.0.1:9417/metrics >/dev/null 2>&1; then
+      echo "[host-metrics] already serving on 127.0.0.1:9417"
+      exit 0
+    fi
+    if is_running; then
       echo "[host-metrics] already running (pid $(cat "$PID_FILE"))"
       exit 0
     fi

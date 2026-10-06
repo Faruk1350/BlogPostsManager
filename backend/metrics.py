@@ -21,3 +21,11 @@ comment_events = Counter("blog_comment_events_total", "Comment lifecycle events"
 share_events = Counter("blog_share_events_total", "Recorded post shares")
 profile_events = Counter("blog_profile_update_events_total", "Profile updates")
 upload_events = Counter("blog_upload_events_total", "Uploaded files")
+
+# Instantiate labelled series at zero so dashboards show 0 instead of "No data"
+# before the first event arrives.
+for _action in ("created", "deleted"):
+    post_events.labels(action=_action).inc(0)
+    comment_events.labels(action=_action).inc(0)
+for _action in ("like", "unlike"):
+    like_events.labels(action=_action).inc(0)
