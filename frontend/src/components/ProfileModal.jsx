@@ -11,6 +11,9 @@ import {
   UserCheck
 } from "lucide-react";
 
+import { api } from "../lib/api";
+import { useAuth } from "../lib/auth";
+
 const AVATAR_PRESETS = [
   "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80",
   "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=200&auto=format&fit=crop&q=80",
@@ -22,13 +25,10 @@ export default function ProfileModal({
   profileId,
   isOpen,
   onClose,
-  allProfiles,
-  onSwitchProfile,
   onOpenReader,
-  currentUser,
   showToast,
-  onProfileUpdated
 }) {
+  const { profile: myProfile, reload } = useAuth();
   const [profile, setProfile] = useState(null);
   const [activeTab, setActiveTab] = useState("posts"); // 'posts' | 'likes'
   const [userPosts, setUserPosts] = useState([]);
@@ -52,68 +52,56 @@ export default function ProfileModal({
 
   if (!isOpen) return null;
 
+  const canEdit = Boolean(myProfile && profile && myProfile.id === profile.id);
+
   const loadProfileData = async (id) => {
     setLoading(true);
     setIsEditing(false);
     try {
-      // 1. Fetch profile details
-      const pRes = await fetch(`/api/profiles/${id}`);
-      if (pRes.ok) {
-        const pData = await pRes.json();
-        setProfile(pData);
-        setDisplayName(pData.display_name || "");
-        setBio(pData.bio || "");
-        setAvatarUrl(pData.avatar_url || "");
-        setWebsite(pData.website || "");
-        setLocation(pData.location || "");
-      }
+      const [pData, postsData, likesData] = await Promise.all([
+        api(`/api/profiles/${id}`),
+        api(`/api/profiles/${id}/posts`).catch(() => []),
+        api(`/api/profiles/${id}/likes`).catch(() => []),
+      ]);
 
-      // 2. Fetch user's posts
-      const postsRes = await fetch(`/api/profiles/${id}/posts`);
-      if (postsRes.ok) {
-        setUserPosts(await postsRes.json());
-      }
-
-      // 3. Fetch user's liked posts
-      const likesRes = await fetch(`/api/profiles/${id}/likes`);
-      if (likesRes.ok) {
-        setLikedPosts(await likesRes.json());
-      }
+      setProfile(pData);
+      setDisplayName(pData.display_name || "");
+      setBio(pData.bio || "");
+      setAvatarUrl(pData.avatar_url || "");
+      setWebsite(pData.website || "");
+      setLocation(pData.location || "");
+      setUserPosts(postsData || []);
+      setLikedPosts(likesData || []);
     } catch (err) {
       console.error("Failed to load profile", err);
+      showToast?.(err.detail || "Could not load profile.");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSaveProfile = async (e) => {
-    e.preventDefault();
+  const handleSaveProfile = async (event) => {
+    event.preventDefault();
     if (!profile) return;
 
     setSaving(true);
     try {
-      const res = await fetch(`/api/profiles/${profile.id}`, {
+      const updated = await api(`/api/profiles/${profile.id}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+        body: {
           display_name: displayName.trim(),
           bio: bio.trim(),
           avatar_url: avatarUrl.trim(),
           website: website.trim(),
-          location: location.trim()
-        })
+          location: location.trim(),
+        },
       });
-
-      if (res.ok) {
-        const updated = await res.json();
-        setProfile(updated);
-        setIsEditing(false);
-        showToast("Profile updated successfully!");
-        if (onProfileUpdated) onProfileUpdated(updated);
-      }
+      setProfile(updated);
+      setIsEditing(false);
+      showToast?.("Profile updated.");
+      if (myProfile?.id === updated.id) await reload();
     } catch (err) {
-      console.error("Failed to update profile", err);
-      showToast("Error updating profile.");
+      showToast?.(err.detail || "Could not update profile.");
     } finally {
       setSaving(false);
     }
@@ -166,40 +154,19 @@ export default function ProfileModal({
               className="profile-avatar-big"
             />
 
-            {/* Actions: Switch Profile or Edit */}
-            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.5rem" }}>
-              {/* Profile Switcher dropdown */}
-              <div style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
-                <span style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>
-                  Viewing:
-                </span>
-                <select
-                  className="sort-select"
-                  value={profile?.id || ""}
-                  onChange={(e) => {
-                    loadProfileData(e.target.value);
-                    if (onSwitchProfile) onSwitchProfile(e.target.value);
-                  }}
-                  style={{ fontSize: "0.8rem", padding: "0.25rem 0.5rem" }}
+            {/* Actions: Edit (owners only) */}
+            {canEdit && (
+              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.5rem" }}>
+                <button
+                  className="btn-secondary"
+                  style={{ padding: "0.4rem 0.85rem", fontSize: "0.8rem" }}
+                  onClick={() => setIsEditing(!isEditing)}
                 >
-                  {allProfiles.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.display_name} (@{p.username})
-                    </option>
-                  ))}
-                </select>
+                  <Edit3 size={13} style={{ marginRight: "4px" }} />
+                  <span>{isEditing ? "Cancel" : "Edit Profile"}</span>
+                </button>
               </div>
-
-              {/* Edit button */}
-              <button
-                className="btn-secondary"
-                style={{ padding: "0.4rem 0.85rem", fontSize: "0.8rem" }}
-                onClick={() => setIsEditing(!isEditing)}
-              >
-                <Edit3 size={13} style={{ marginRight: "4px" }} />
-                <span>{isEditing ? "Cancel" : "Edit Profile"}</span>
-              </button>
-            </div>
+            )}
           </div>
 
           {/* Edit Form OR View Header */}

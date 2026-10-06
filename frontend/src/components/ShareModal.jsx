@@ -1,12 +1,13 @@
 import React, { useState } from "react";
-import { X, Copy, Check, MessageCircle, Mail, Share2, Globe } from "lucide-react";
+import { X, Copy, Check, MessageCircle, Mail, Share2 } from "lucide-react";
+
+import { api } from "../lib/api";
 
 export default function ShareModal({
   post,
   isOpen,
   onClose,
-  showToast,
-  currentUser
+  showToast
 }) {
   const [copied, setCopied] = useState(false);
 
@@ -18,13 +19,9 @@ export default function ShareModal({
 
   const trackShare = async (platform) => {
     try {
-      await fetch(`/api/posts/${post.id}/share`, {
+      await api(`/api/posts/${post.id}/share`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          platform: platform,
-          user_id: currentUser?.id || "user_admin"
-        })
+        body: { platform },
       });
       post.shares_count = (post.shares_count || 0) + 1;
     } catch (err) {

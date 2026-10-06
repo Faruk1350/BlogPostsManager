@@ -1661,7 +1661,7 @@
     {
       "id": 27,
       "type": "stat",
-      "title": "Uploads (total)",
+      "title": "Failed logins",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -1675,7 +1675,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(blog_upload_events_total)",
+          "expr": "sum(blog_auth_events_total{action=\"login_failed\"})",
           "instant": true
         }
       ],
@@ -1687,7 +1687,7 @@
           "fields": "",
           "values": false
         },
-        "colorMode": "value",
+        "colorMode": "background",
         "graphMode": "none",
         "justifyMode": "auto",
         "textMode": "auto",
@@ -1698,16 +1698,20 @@
           "decimals": 0,
           "mappings": [],
           "noValue": "0",
-          "color": {
-            "mode": "fixed",
-            "fixedColor": "orange"
-          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "orange",
+                "color": "green",
                 "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 5
+              },
+              {
+                "color": "red",
+                "value": 20
               }
             ]
           }
@@ -3100,7 +3104,7 @@
       },
       "options": {
         "mode": "markdown",
-        "content": "### Alert rules\n**critical**\n- `AppDown` — scrape fails for 1m\n- `AppHighLatencyP99` — p99 > 3s for 5m\n- `HostDown` — node-exporter missing 2m\n- `HostDiskSpaceCritical` — root disk > 93%\n- `TunnelNoConnections` — cloudflared HA connections < 1\n- `BlackboxProbeFailed` — public probe failing 2m\n\n**warning**\n- `AppHighErrorRate` — 5xx > 5% for 2m\n- `AppHighLatencyP95` — p95 > 1s for 5m\n- `HostHighCpu` / `HostHighMemory` / `HostHighLoad`\n- `HostDiskSpaceLow` / `HostDiskWillFillIn24h`\n- `ContainerRestartLoop` / `ContainerHighCpu` / `ContainerHighMemory`\n- `BlackboxProbeSlow`, `AlertmanagerDown`, `LokiDown`\n\n**info**\n- `AppNoTraffic` — no requests for 15m\n\n---\n**Triage**\n1. `make logs` — app logs\n2. `make tunnel-status` — tunnel + public endpoints\n3. `make ps` — container status\n4. Logs row → filter `ERROR`\n\n**Silence:** https://alerts.tavesglobal.com"
+        "content": "### Alert rules\n**critical**\n- `AppDown` — scrape fails for 1m\n- `AppHighLatencyP99` — p99 > 3s for 5m\n- `HostDown` — node-exporter missing 2m\n- `HostDiskSpaceCritical` — root disk > 93%\n- `TunnelNoConnections` — cloudflared HA connections < 1\n- `BlackboxProbeFailed` — public probe failing 2m\n\n**warning**\n- `AppHighErrorRate` — 5xx > 5% for 2m\n- `AppHighLatencyP95` — p95 > 1s for 5m\n- `AppLoginFailureSpike` — >5 failed logins / 15m\n- `HostHighCpu` / `HostHighMemory` / `HostHighLoad`\n- `HostDiskSpaceLow` / `HostDiskWillFillIn24h`\n- `ContainerRestartLoop` / `ContainerHighCpu` / `ContainerHighMemory`\n- `BlackboxProbeSlow`, `AlertmanagerDown`, `LokiDown`\n\n**info**\n- `AppNoTraffic` — no requests for 15m\n\n---\n**Triage**\n1. `make logs` — app logs\n2. `make tunnel-status` — tunnel + public endpoints\n3. `make ps` — container status\n4. Logs row → filter `ERROR`\n\n**Silence:** https://alerts.tavesglobal.com"
       }
     }
   ]

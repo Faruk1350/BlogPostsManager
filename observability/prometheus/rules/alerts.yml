@@ -67,6 +67,17 @@ groups:
           summary: "App RSS above 512MB"
           description: "Process resident memory has stayed above 512MB for 10 minutes."
 
+      - alert: AppLoginFailureSpike
+        expr: increase(blog_auth_events_total{action="login_failed"}[15m]) > 5
+        for: 1m
+        labels:
+          severity: warning
+          service: blog-app
+        annotations:
+          summary: "Login failure spike ({{ $value }} in 15m)"
+          description: "More than 5 failed logins in 15 minutes — possible brute force."
+          runbook: "Check Loki: {job=\"blog-app\"} |= \"login_failed\""
+
   # ------------------------------------------------------------------
   # Host (VM / machine)
   # ------------------------------------------------------------------

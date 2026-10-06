@@ -4,15 +4,16 @@ from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from prometheus_fastapi_instrumentator import Instrumentator
 
 from backend import database, metrics
 from backend.database import DatabaseUnavailable
+from backend.routes.auth import auth_router
 from backend.routes.health import health_router
 from backend.routes.items import posts_router
-from backend.routes.profiles import profiles_router
+from backend.routes.profiles import me_router, profiles_router
 from backend.routes.upload import upload_router
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -92,14 +93,32 @@ app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
 
 # ---------------- Routers ----------------
 app.include_router(health_router)
+app.include_router(auth_router)
+app.include_router(me_router)
 app.include_router(posts_router)
 app.include_router(profiles_router)
 app.include_router(upload_router)
 
 # ---------------- Frontend (production build) ----------------
 if FRONTEND_DIST.is_dir():
-    # Serve the built React app at "/" — API routes above take precedence.
-    app.mount("/", StaticFiles(directory=str(FRONTEND_DIST), html=True), name="frontend")
+    # Hashed build assets are served as static files; every other path falls
+    # back to index.html so client-side routes (/login, /settings, /search…)
+    # work on a hard refresh.
+    assets_dir = FRONTEND_DIST / "assets"
+    if assets_dir.is_dir():
+        app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="assets")
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    def spa(full_path: str):
+        candidate = (FRONTEND_DIST / full_path).resolve()
+        if (
+            full_path
+            and str(candidate).startswith(str(FRONTEND_DIST.resolve()))
+            and candidate.is_file()
+        ):
+            return FileResponse(candidate)
+        return FileResponse(FRONTEND_DIST / "index.html")
+
 else:
     @app.get("/")
     def root():

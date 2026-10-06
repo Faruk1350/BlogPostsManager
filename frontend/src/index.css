@@ -123,3 +123,63 @@ img {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--text-muted);
 }
+
+/* ===================================================
+   Dark theme — override the palette, keep structure
+   =================================================== */
+[data-theme="dark"] {
+  --bg-canvas: #0b1120;
+  --bg-surface: #111827;
+  --bg-subtle: #1e293b;
+  --bg-muted: #334155;
+  --bg-input: #0f172a;
+
+  --border-subtle: #1e293b;
+  --border-strong: #334155;
+  --border-focus: #60a5fa;
+
+  --text-primary: #e2e8f0;
+  --text-secondary: #cbd5e1;
+  --text-muted: #94a3b8;
+  --text-inverse: #0b1120;
+
+  --accent-primary: #3b82f6;
+  --accent-primary-hover: #2563eb;
+  --accent-primary-light: #1e3a8a;
+
+  --accent-like: #fb7185;
+  --accent-like-bg: #4c1d24;
+  --accent-like-border: #881337;
+
+  --accent-share: #38bdf8;
+  --accent-share-bg: #0c4a6e;
+
+  --accent-comment: #a5b4fc;
+  --accent-comment-bg: #312e81;
+
+  --accent-tag-tech: #1e3a8a;
+  --accent-tag-tech-text: #bfdbfe;
+  --accent-tag-design: #3b0764;
+  --accent-tag-design-text: #e9d5ff;
+  --accent-tag-lifestyle: #14532d;
+  --accent-tag-lifestyle-text: #bbf7d0;
+  --accent-tag-db: #7c2d12;
+  --accent-tag-db-text: #fed7aa;
+
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.35);
+  --shadow-md: 0 6px 16px -2px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 16px 32px -4px rgba(0, 0, 0, 0.55);
+  --shadow-modal: 0 24px 48px -12px rgba(0, 0, 0, 0.6);
+}
+
+[data-theme="dark"] img.reader-cover {
+  opacity: 0.92;
+}
+
+[data-theme="dark"] .navbar,
+[data-theme="dark"] .modal-content,
+[data-theme="dark"] .settings-card,
+[data-theme="dark"] .auth-card {
+  background: var(--bg-surface);
+}
