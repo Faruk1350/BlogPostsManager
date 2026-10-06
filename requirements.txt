@@ -1,6 +1,2 @@
 Flask
-flask-cors
-supabase
-python-dotenv
 pytest
-prometheus-flask-exporter

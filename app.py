@@ -1,36 +1,124 @@
-from flask import Flask, request, jsonify
-from prometheus_flask_exporter import PrometheusMetrics
+from flask import Flask, request, jsonify, render_template, redirect, url_for, session
+from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
-metrics = PrometheusMetrics(app)
+app.secret_key = "blog-posts-manager-secret-key"
 
-# In-memory list to store blog posts
-posts = []
+# ---------------- USERS ----------------
+users = []
+
+# ---------------- POSTS ----------------
+posts = [
+    {
+        "id": 1,
+        "title": "My First Blog",
+        "content": "Welcome to Blog Posts Manager!",
+        "author": "Admin"
+    }
+]
 
 
+# ---------------- HOME / DASHBOARD ----------------
+@app.route("/")
+def home():
+    if "user" not in session:
+        return redirect(url_for("login"))
+
+    return render_template(
+        "index.html",
+        posts=posts,
+        user=session["user"]
+    )
+
+
+# ---------------- SIGN UP ----------------
+@app.route("/signup", methods=["GET", "POST"])
+def signup():
+
+    if request.method == "POST":
+        name = request.form["name"]
+        email = request.form["email"]
+        password = request.form["password"]
+
+        # Check existing email
+        for user in users:
+            if user["email"] == email:
+                return "Email already registered!"
+
+        new_user = {
+            "name": name,
+            "email": email,
+            "password": generate_password_hash(password)
+        }
+
+        users.append(new_user)
+
+        return redirect(url_for("login"))
+
+    return render_template("signup.html")
+
+
+# ---------------- LOGIN ----------------
+@app.route("/login", methods=["GET", "POST"])
+def login():
+
+    if request.method == "POST":
+        email = request.form["email"]
+        password = request.form["password"]
+
+        for user in users:
+            if user["email"] == email and check_password_hash(
+                user["password"], password
+            ):
+                session["user"] = user["name"]
+                session["email"] = user["email"]
+
+                return redirect(url_for("home"))
+
+        return "Invalid email or password!"
+
+    return render_template("login.html")
+
+
+# ---------------- LOGOUT ----------------
+@app.route("/logout")
+def logout():
+
+    session.clear()
+
+    return redirect(url_for("login"))
+
+
+# ---------------- GET POSTS API ----------------
 @app.route("/items", methods=["GET"])
-def get_posts():
+def get_items():
     return jsonify(posts)
 
 
+# ---------------- ADD POST API ----------------
 @app.route("/items", methods=["POST"])
-def add_post():
+def add_item():
+
+    if "user" not in session:
+        return jsonify({"error": "Please login first"}), 401
+
     data = request.get_json()
 
-    post = {
+    new_post = {
         "id": len(posts) + 1,
         "title": data["title"],
         "content": data["content"],
-        "author": data["author"]
+        "author": session["user"]
     }
 
-    posts.append(post)
+    posts.append(new_post)
 
-    return jsonify(post), 201
+    return jsonify(new_post), 201
 
 
+# ---------------- HEALTH CHECK ----------------
 @app.route("/health", methods=["GET"])
-def health_check():
+def health():
     return "OK"
 
 
