@@ -1,4 +1,5 @@
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, Request
@@ -7,7 +8,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from prometheus_fastapi_instrumentator import Instrumentator
 
-from backend import metrics
+from backend import database, metrics
 from backend.database import DatabaseUnavailable
 from backend.routes.health import health_router
 from backend.routes.items import posts_router
@@ -18,10 +19,22 @@ BASE_DIR = Path(__file__).resolve().parent
 FRONTEND_DIST = BASE_DIR.parent / "frontend" / "dist"
 UPLOAD_DIR = BASE_DIR / "uploads"
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Seed gauges that only change on traffic (never block startup on the DB).
+    try:
+        database.refresh_post_count()
+    except Exception:
+        pass
+    yield
+
+
 app = FastAPI(
     title="Blog Posts Manager API",
     description="Modern, Asynchronous Blog API powered by FastAPI and Supabase",
     version="2.0.0",
+    lifespan=lifespan,
 )
 
 metrics.app_info.info({"version": os.getenv("APP_VERSION", "dev")})

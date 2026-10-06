@@ -37,7 +37,7 @@ def _fail(action: str, exc: Exception) -> DatabaseUnavailable:
     return DatabaseUnavailable(f"{action} failed: {exc}")
 
 
-def _refresh_post_count() -> None:
+def refresh_post_count() -> None:
     """Keep the posts gauge in sync. Metrics must never break a request."""
     try:
         result = _db().table("posts").select("id", count="exact").execute()
@@ -94,7 +94,7 @@ def get_posts(
         for post in posts:
             post["is_liked"] = post["id"] in liked
 
-        _refresh_post_count()
+        refresh_post_count()
         return posts
     except DatabaseUnavailable:
         raise
@@ -152,7 +152,7 @@ def create_post(data: Dict[str, Any]) -> Dict[str, Any]:
     post["is_liked"] = False
     logger.info("post_created id=%s title=%s author=%s", post["id"], post["title"], post["author_name"])
     metrics.post_events.labels(action="created").inc()
-    _refresh_post_count()
+    refresh_post_count()
     return post
 
 
@@ -169,7 +169,7 @@ def delete_post(post_id: int) -> bool:
 
     logger.info("post_deleted id=%s", post_id)
     metrics.post_events.labels(action="deleted").inc()
-    _refresh_post_count()
+    refresh_post_count()
     return True
 
 

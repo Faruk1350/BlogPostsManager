@@ -44,3 +44,7 @@ CMD ["uvicorn", "app:app", \
      "--workers", "1", \
      "--proxy-headers", "--forwarded-allow-ips", "*", \
      "--log-config", "backend/logging.json"]
+
+# ---------------- test stage (tests are not part of the runtime image) ----------------
+FROM runtime AS test
+COPY --chown=appuser:appuser test_app.py ./
