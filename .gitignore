@@ -1,8 +1,32 @@
+# Python
 __pycache__/
 .pytest_cache/
 .venv/
 venv/
 *.pyc
+*.pyo
+
+# Environment variables
 .env
+backend/.env
+*.env.local
+
+# Node / Frontend
+node_modules/
+frontend/node_modules/
+frontend/dist/
+dist/
+
+# Uploads
+backend/uploads/
+uploads/
+
+# Observability / local tooling
 .venv-host/
 .pipeline/
+
+# IDE / OS
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
