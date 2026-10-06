@@ -18,12 +18,3 @@ datasources:
     url: http://loki:3100
     jsonData:
       maxLines: 1000
-
-  - name: Alertmanager
-    uid: alertmanager
-    type: alertmanager
-    access: proxy
-    url: http://alertmanager:9093
-    jsonData:
-      implementation: prometheus
-      handleGrafanaManagedAlerts: false
