@@ -1,0 +1,251 @@
+groups:
+  # ------------------------------------------------------------------
+  # Application (Flask / Blog Posts Manager)
+  # ------------------------------------------------------------------
+  - name: blog-app
+    rules:
+      - alert: AppDown
+        expr: up{job="blog-app"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: blog-app
+        annotations:
+          summary: "Blog app is DOWN"
+          description: "Prometheus has not been able to scrape {{ $labels.instance }} for over 1 minute."
+          runbook: "cd BlogPostsManager && make logs   # docker compose ps / logs app"
+
+      - alert: AppNoTraffic
+        expr: job:blog_app_requests:rate5m == 0
+        for: 15m
+        labels:
+          severity: info
+          service: blog-app
+        annotations:
+          summary: "No HTTP traffic for 15 minutes"
+          description: "The app is up but serving zero requests. Tunnel or DNS may be misconfigured."
+          runbook: "make tunnel-status && curl -sI https://blog.tavesglobal.com/health"
+
+      - alert: AppHighErrorRate
+        expr: job:blog_app_error_ratio:5m > 0.05
+        for: 2m
+        labels:
+          severity: warning
+          service: blog-app
+        annotations:
+          summary: "5xx error rate above 5% ({{ $value | humanizePercentage }})"
+          description: "More than 5% of requests have returned 5xx for 2 minutes."
+          runbook: "Open Grafana → Blog Observability → Logs row, filter ERROR"
+
+      - alert: AppHighLatencyP95
+        expr: job:blog_app_latency_p95:5m > 1
+        for: 5m
+        labels:
+          severity: warning
+          service: blog-app
+        annotations:
+          summary: "p95 latency above 1s ({{ $value | humanizeDuration }})"
+          description: "95th percentile request latency has been above 1 second for 5 minutes."
+
+      - alert: AppHighLatencyP99
+        expr: job:blog_app_latency_p99:5m > 3
+        for: 5m
+        labels:
+          severity: critical
+          service: blog-app
+        annotations:
+          summary: "p99 latency above 3s ({{ $value | humanizeDuration }})"
+          description: "Tail latency is critically high."
+
+      - alert: AppLoginFailureSpike
+        expr: increase(blog_login_failures_total{job="blog-app"}[15m]) > 5
+        for: 5m
+        labels:
+          severity: warning
+          service: blog-app
+        annotations:
+          summary: "Login failure spike ({{ $value }} failures in 15m)"
+          description: "Possible brute-force attempt against /login."
+          runbook: "Check Loki: {job=\"blog-app\"} |= \"LOGIN FAILED\""
+
+      - alert: AppHighMemory
+        expr: process_resident_memory_bytes{job="blog-app"} > 512 * 1024 * 1024
+        for: 10m
+        labels:
+          severity: warning
+          service: blog-app
+        annotations:
+          summary: "App RSS above 512MB"
+          description: "Process resident memory has stayed above 512MB for 10 minutes."
+
+  # ------------------------------------------------------------------
+  # Host (VM / machine)
+  # ------------------------------------------------------------------
+  - name: host
+    rules:
+      - alert: HostDown
+        expr: up{job="node-exporter"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: host
+        annotations:
+          summary: "Host exporter is DOWN"
+          description: "node-exporter is unreachable — host metrics are missing."
+
+      - alert: HostHighCpu
+        expr: instance:node_cpu_utilisation:rate5m > 85
+        for: 10m
+        labels:
+          severity: warning
+          service: host
+        annotations:
+          summary: "CPU above 85% ({{ $value | printf \"%.1f\" }}%)"
+          description: "CPU utilisation has been above 85% for 10 minutes."
+
+      - alert: HostHighMemory
+        expr: instance:node_memory_utilisation:ratio * 100 > 90
+        for: 10m
+        labels:
+          severity: warning
+          service: host
+        annotations:
+          summary: "Memory above 90% ({{ $value | printf \"%.1f\" }}%)"
+          description: "Memory utilisation has been above 90% for 10 minutes."
+
+      - alert: HostDiskSpaceLow
+        expr: instance:node_filesystem_utilisation:ratio * 100 > 85
+        for: 10m
+        labels:
+          severity: warning
+          service: host
+        annotations:
+          summary: "Disk space low on {{ $labels.mountpoint }} ({{ $value | printf \"%.1f\" }}% used)"
+          description: "Less than 15% disk space remaining."
+
+      - alert: HostDiskSpaceCritical
+        expr: instance:node_filesystem_utilisation:ratio * 100 > 93
+        for: 5m
+        labels:
+          severity: critical
+          service: host
+        annotations:
+          summary: "Disk space critical on {{ $labels.mountpoint }} ({{ $value | printf \"%.1f\" }}% used)"
+          description: "Less than 7% disk space remaining."
+
+      - alert: HostDiskWillFillIn24h
+        expr: predict_linear(node_filesystem_avail_bytes{fstype!~"tmpfs|overlay|ramfs|autofs|devfs|squashfs"}[6h], 24 * 3600) < 0
+        for: 30m
+        labels:
+          severity: warning
+          service: host
+        annotations:
+          summary: "Disk {{ $labels.mountpoint }} predicted to fill within 24h"
+          description: "Based on the last 6 hours of growth, the filesystem will run out of space within 24 hours."
+
+      - alert: HostHighLoad
+        expr: node_load5 > 8
+        for: 10m
+        labels:
+          severity: warning
+          service: host
+        annotations:
+          summary: "Load average above 8"
+          description: "5-minute load average has been above 8 for 10 minutes."
+
+  # ------------------------------------------------------------------
+  # Containers (docker-metrics exporter, Docker API based)
+  # ------------------------------------------------------------------
+  - name: containers
+    rules:
+      - alert: ContainerRestartLoop
+        expr: delta(docker_container_restarts[15m]) > 0
+        for: 0m
+        labels:
+          severity: warning
+          service: containers
+        annotations:
+          summary: "Container {{ $labels.name }} restarted"
+          description: "{{ $labels.name }} restarted {{ $value }} time(s) in the last 15 minutes."
+
+      - alert: ContainerHighCpu
+        expr: docker_container_cpu_percent > 80
+        for: 10m
+        labels:
+          severity: warning
+          service: containers
+        annotations:
+          summary: "Container {{ $labels.name }} CPU above 80%"
+          description: "Sustained CPU usage above 80% of one core for 10 minutes."
+
+      - alert: ContainerHighMemory
+        expr: docker_container_memory_percent > 85
+        for: 10m
+        labels:
+          severity: warning
+          service: containers
+        annotations:
+          summary: "Container {{ $labels.name }} memory above 85% of limit"
+          description: "Container is close to its memory limit — risk of OOM kill."
+
+  # ------------------------------------------------------------------
+  # Tunnel, probes and monitoring self-health
+  # ------------------------------------------------------------------
+  - name: platform
+    rules:
+      - alert: TunnelNoConnections
+        expr: cloudflared_tunnel_ha_connections < 1
+        for: 2m
+        labels:
+          severity: critical
+          service: cloudflared
+        annotations:
+          summary: "Cloudflare tunnel has no healthy connections"
+          description: "blog/grafana/alerts hostnames are unreachable from the internet."
+          runbook: "make tunnel-status && make tunnel-up"
+
+      - alert: BlackboxProbeFailed
+        expr: probe_success == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: blackbox
+        annotations:
+          summary: "Endpoint probe failing: {{ $labels.instance }}"
+          description: "Synthetic HTTP probe has been failing for 2 minutes."
+
+      - alert: BlackboxProbeSlow
+        expr: probe_duration_seconds > 3
+        for: 5m
+        labels:
+          severity: warning
+          service: blackbox
+        annotations:
+          summary: "Endpoint probe slow: {{ $labels.instance }} ({{ $value | printf \"%.2f\" }}s)"
+
+      - alert: AlertmanagerDown
+        expr: up{job="alertmanager"} == 0
+        for: 5m
+        labels:
+          severity: warning
+          service: monitoring
+        annotations:
+          summary: "Alertmanager is DOWN"
+
+      - alert: LokiDown
+        expr: up{job="loki"} == 0
+        for: 5m
+        labels:
+          severity: warning
+          service: monitoring
+        annotations:
+          summary: "Loki is DOWN — logs will not be collected"
+
+      - alert: DockerMetricsExporterDown
+        expr: up{job="docker-metrics"} == 0
+        for: 5m
+        labels:
+          severity: warning
+          service: monitoring
+        annotations:
+          summary: "Container metrics exporter is DOWN"

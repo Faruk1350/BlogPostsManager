@@ -1,0 +1,487 @@
+{
+  "uid": "blog-observability",
+  "title": "Blog Posts Manager — Full Observability",
+  "description": "Golden signals, business metrics, host/container resources, tunnel & probe health, logs and alerts for blog.tavesglobal.com",
+  "tags": ["blog", "flask", "prometheus", "loki", "sre"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "15s",
+  "editable": true,
+  "graphTooltip": 1,
+  "time": {"from": "now-6h", "to": "now"},
+  "links": [
+    {"title": "Prometheus", "type": "link", "url": "https://blog.tavesglobal.com", "icon": "external"},
+    {"title": "Alertmanager", "type": "link", "url": "https://alerts.tavesglobal.com", "icon": "external"},
+    {"title": "Local Prometheus", "type": "link", "url": "http://127.0.0.1:9090", "icon": "external"}
+  ],
+  "annotations": {
+    "list": [
+      {
+        "name": "Alerts",
+        "datasource": {"type": "prometheus", "uid": "prometheus"},
+        "enable": true,
+        "expr": "ALERTS{alertstate=\"firing\"}",
+        "tagKeys": "alertname,severity",
+        "iconColor": "red",
+        "titleFormat": "{{ alertname }} ({{ severity }})",
+        "textFormat": "{{ summary }}"
+      }
+    ]
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "container",
+        "label": "Container",
+        "type": "query",
+        "datasource": {"type": "prometheus", "uid": "prometheus"},
+        "query": {"query": "label_values(docker_container_cpu_percent, name)", "refId": "StandardVariableQuery"},
+        "refresh": 2,
+        "includeAll": true,
+        "multi": true,
+        "current": {"selected": true, "text": ["All"], "value": ["$__all"]},
+        "sort": 1
+      }
+    ]
+  },
+  "panels": [
+    {"id": 1, "type": "row", "title": "🚦 Service Overview", "collapsed": false, "gridPos": {"h": 1, "w": 24, "x": 0, "y": 0}, "panels": []},
+
+    {
+      "id": 2, "type": "stat", "title": "App status",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 6, "w": 3, "x": 0, "y": 1},
+      "targets": [{"refId": "A", "expr": "up{job=\"blog-app\"}", "legendFormat": "app", "instant": true}],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "colorMode": "background", "graphMode": "none", "justifyMode": "auto", "textMode": "auto", "orientation": "auto"},
+      "fieldConfig": {"defaults": {"mappings": [{"type": "value", "options": {"0": {"text": "DOWN", "color": "red", "index": 0}, "1": {"text": "UP", "color": "green", "index": 1}}}], "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}]}}, "overrides": []}
+    },
+    {
+      "id": 3, "type": "stat", "title": "Requests / sec",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 6, "w": 3, "x": 3, "y": 1},
+      "targets": [{"refId": "A", "expr": "sum(rate(flask_http_request_total{job=\"blog-app\"}[$__rate_interval]))", "instant": true}],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "colorMode": "value", "graphMode": "area", "justifyMode": "auto", "textMode": "auto", "orientation": "auto"},
+      "fieldConfig": {"defaults": {"unit": "reqps", "decimals": 2, "mappings": [], "thresholds": {"mode": "absolute", "steps": [{"color": "blue", "value": null}]}}, "overrides": []}
+    },
+    {
+      "id": 4, "type": "stat", "title": "5xx error rate",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 6, "w": 3, "x": 6, "y": 1},
+      "targets": [{"refId": "A", "expr": "job:blog_app_error_ratio:5m * 100", "instant": true}],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "colorMode": "background", "graphMode": "area", "justifyMode": "auto", "textMode": "auto", "orientation": "auto"},
+      "fieldConfig": {"defaults": {"unit": "percent", "decimals": 2, "mappings": [], "noValue": "0", "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 1}, {"color": "red", "value": 5}]}}, "overrides": []}
+    },
+    {
+      "id": 5, "type": "stat", "title": "Latency p95",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 6, "w": 3, "x": 9, "y": 1},
+      "targets": [{"refId": "A", "expr": "job:blog_app_latency_p95:5m", "instant": true}],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "colorMode": "background", "graphMode": "area", "justifyMode": "auto", "textMode": "auto", "orientation": "auto"},
+      "fieldConfig": {"defaults": {"unit": "s", "decimals": 3, "mappings": [], "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 0.5}, {"color": "red", "value": 1}]}}, "overrides": []}
+    },
+    {
+      "id": 6, "type": "stat", "title": "Latency p99",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 6, "w": 3, "x": 12, "y": 1},
+      "targets": [{"refId": "A", "expr": "job:blog_app_latency_p99:5m", "instant": true}],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "colorMode": "background", "graphMode": "area", "justifyMode": "auto", "textMode": "auto", "orientation": "auto"},
+      "fieldConfig": {"defaults": {"unit": "s", "decimals": 3, "mappings": [], "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 1.5}, {"color": "red", "value": 3}]}}, "overrides": []}
+    },
+    {
+      "id": 7, "type": "stat", "title": "Uptime",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 6, "w": 3, "x": 15, "y": 1},
+      "targets": [{"refId": "A", "expr": "time() - process_start_time_seconds{job=\"blog-app\"}", "instant": true}],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "colorMode": "value", "graphMode": "none", "justifyMode": "auto", "textMode": "auto", "orientation": "auto"},
+      "fieldConfig": {"defaults": {"unit": "s", "decimals": 0, "mappings": [], "thresholds": {"mode": "absolute", "steps": [{"color": "purple", "value": null}]}}, "overrides": []}
+    },
+    {
+      "id": 8, "type": "stat", "title": "Scrape targets up",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 6, "w": 3, "x": 18, "y": 1},
+      "targets": [{"refId": "A", "expr": "count(up == 1) / count(up) * 100", "instant": true}],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "colorMode": "background", "graphMode": "none", "justifyMode": "auto", "textMode": "auto", "orientation": "auto"},
+      "fieldConfig": {"defaults": {"unit": "percent", "decimals": 0, "mappings": [], "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "yellow", "value": 80}, {"color": "green", "value": 100}]}}, "overrides": []}
+    },
+    {
+      "id": 9, "type": "stat", "title": "Firing alerts",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 6, "w": 3, "x": 21, "y": 1},
+      "targets": [{"refId": "A", "expr": "count(ALERTS{alertstate=\"firing\"})", "instant": true}],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "colorMode": "background", "graphMode": "none", "justifyMode": "auto", "textMode": "auto", "orientation": "auto"},
+      "fieldConfig": {"defaults": {"decimals": 0, "mappings": [], "noValue": "0", "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 1}, {"color": "red", "value": 3}]}}, "overrides": []}
+    },
+
+    {"id": 10, "type": "row", "title": "📈 Traffic & Errors", "collapsed": false, "gridPos": {"h": 1, "w": 24, "x": 0, "y": 7}, "panels": []},
+
+    {
+      "id": 11, "type": "timeseries", "title": "Requests/sec by endpoint (top 10)",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 9, "w": 12, "x": 0, "y": 8},
+      "targets": [{"refId": "A", "expr": "topk(10, sum by (path) (rate(flask_http_request_total{job=\"blog-app\"}[$__rate_interval])))", "legendFormat": "{{path}}"}],
+      "options": {"legend": {"calcs": ["lastNotNull", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "fieldConfig": {"defaults": {"unit": "reqps", "custom": {"drawStyle": "line", "lineInterpolation": "smooth", "lineWidth": 1, "fillOpacity": 15, "gradientMode": "opacity", "spanNulls": false, "showPoints": "never", "stacking": {"mode": "normal", "group": "A"}}, "color": {"mode": "palette-classic"}}, "overrides": []}
+    },
+    {
+      "id": 12, "type": "timeseries", "title": "Requests/sec by status class",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 9, "w": 12, "x": 12, "y": 8},
+      "targets": [
+        {"refId": "A", "expr": "sum(rate(flask_http_request_total{job=\"blog-app\",status=~\"2..\"}[$__rate_interval]))", "legendFormat": "2xx"},
+        {"refId": "B", "expr": "sum(rate(flask_http_request_total{job=\"blog-app\",status=~\"3..\"}[$__rate_interval]))", "legendFormat": "3xx"},
+        {"refId": "C", "expr": "sum(rate(flask_http_request_total{job=\"blog-app\",status=~\"4..\"}[$__rate_interval]))", "legendFormat": "4xx"},
+        {"refId": "D", "expr": "sum(rate(flask_http_request_total{job=\"blog-app\",status=~\"5..\"}[$__rate_interval]))", "legendFormat": "5xx"}
+      ],
+      "options": {"legend": {"calcs": ["lastNotNull", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "fieldConfig": {
+        "defaults": {"unit": "reqps", "custom": {"drawStyle": "line", "lineInterpolation": "smooth", "lineWidth": 1, "fillOpacity": 15, "gradientMode": "opacity", "spanNulls": false, "showPoints": "never", "stacking": {"mode": "none", "group": "A"}}, "color": {"mode": "palette-classic"}},
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "2xx"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "green"}}]},
+          {"matcher": {"id": "byName", "options": "3xx"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "blue"}}]},
+          {"matcher": {"id": "byName", "options": "4xx"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "yellow"}}]},
+          {"matcher": {"id": "byName", "options": "5xx"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "red"}}]}
+        ]
+      }
+    },
+    {
+      "id": 13, "type": "piechart", "title": "Status code distribution",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 6, "x": 0, "y": 17},
+      "targets": [{"refId": "A", "expr": "sum by (status) (increase(flask_http_request_total{job=\"blog-app\"}[$__range]))", "legendFormat": "{{status}}", "instant": true}],
+      "options": {"pieType": "donut", "tooltip": {"mode": "single", "sort": "none"}, "legend": {"displayMode": "table", "placement": "right", "showLegend": true, "values": ["value", "percent"]}, "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "displayLabels": ["percent"]},
+      "fieldConfig": {"defaults": {"unit": "short", "decimals": 0, "color": {"mode": "palette-classic"}, "mappings": []}, "overrides": []}
+    },
+    {
+      "id": 14, "type": "timeseries", "title": "Requests/sec by method",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 6, "x": 6, "y": 17},
+      "targets": [{"refId": "A", "expr": "sum by (method) (rate(flask_http_request_total{job=\"blog-app\"}[$__rate_interval]))", "legendFormat": "{{method}}"}],
+      "options": {"legend": {"calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "fieldConfig": {"defaults": {"unit": "reqps", "custom": {"drawStyle": "line", "lineInterpolation": "smooth", "lineWidth": 1, "fillOpacity": 20, "gradientMode": "opacity", "spanNulls": false, "showPoints": "never"}, "color": {"mode": "palette-classic"}}, "overrides": []}
+    },
+    {
+      "id": 15, "type": "table", "title": "Top endpoints (last range)",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 17},
+      "targets": [
+        {"refId": "A", "expr": "topk(10, sum by (path) (increase(flask_http_request_total{job=\"blog-app\"}[$__range])))", "legendFormat": "requests", "instant": true, "format": "table"},
+        {"refId": "B", "expr": "sum by (path) (increase(flask_http_request_total{job=\"blog-app\",status=~\"5..\"}[$__range]))", "legendFormat": "errors", "instant": true, "format": "table"},
+        {"refId": "C", "expr": "histogram_quantile(0.95, sum by (le, path) (rate(flask_http_request_duration_seconds_bucket{job=\"blog-app\"}[$__rate_interval])))", "legendFormat": "p95", "instant": true, "format": "table"}
+      ],
+      "transformations": [
+        {"id": "joinByField", "options": {"byField": "path", "mode": "outer"}},
+        {"id": "organize", "options": {"excludeByName": {"Time": true, "Time 1": true, "Time 2": true, "Time 3": true, "__name__": true}, "renameByName": {"path": "Endpoint", "requests": "Requests", "errors": "5xx", "p95": "p95 (s)"}}},
+        {"id": "sortBy", "options": {"fields": [{"field": "Requests", "desc": true}]}}
+      ],
+      "options": {"showHeader": true, "cellHeight": "sm"},
+      "fieldConfig": {"defaults": {"custom": {"align": "auto", "cellOptions": {"type": "auto"}}}, "overrides": [{"matcher": {"id": "byName", "options": "p95 (s)"}, "properties": [{"id": "unit", "value": "s"}, {"id": "decimals", "value": 4}]}, {"matcher": {"id": "byName", "options": "5xx"}, "properties": [{"id": "custom.cellOptions", "value": {"type": "color-text"}}, {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 1}, {"color": "red", "value": 10}]}}]}]}
+    },
+
+    {"id": 16, "type": "row", "title": "⏱️ Latency", "collapsed": false, "gridPos": {"h": 1, "w": 24, "x": 0, "y": 25}, "panels": []},
+
+    {
+      "id": 17, "type": "timeseries", "title": "Latency percentiles (avg / p50 / p95 / p99)",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 9, "w": 12, "x": 0, "y": 26},
+      "targets": [
+        {"refId": "A", "expr": "sum(rate(flask_http_request_duration_seconds_sum{job=\"blog-app\"}[$__rate_interval])) / clamp_min(sum(rate(flask_http_request_duration_seconds_count{job=\"blog-app\"}[$__rate_interval])), 1)", "legendFormat": "avg"},
+        {"refId": "B", "expr": "job:blog_app_latency_p50:5m", "legendFormat": "p50"},
+        {"refId": "C", "expr": "job:blog_app_latency_p95:5m", "legendFormat": "p95"},
+        {"refId": "D", "expr": "job:blog_app_latency_p99:5m", "legendFormat": "p99"}
+      ],
+      "options": {"legend": {"calcs": ["lastNotNull", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "fieldConfig": {"defaults": {"unit": "s", "decimals": 3, "custom": {"drawStyle": "line", "lineInterpolation": "smooth", "lineWidth": 1, "fillOpacity": 8, "gradientMode": "opacity", "spanNulls": false, "showPoints": "never"}, "color": {"mode": "palette-classic"}}, "overrides": [{"matcher": {"id": "byName", "options": "p99"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "red"}}]}]}
+    },
+    {
+      "id": 18, "type": "heatmap", "title": "Latency heatmap",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 9, "w": 12, "x": 12, "y": 26},
+      "targets": [{"refId": "A", "expr": "sum by (le) (rate(flask_http_request_duration_seconds_bucket{job=\"blog-app\"}[$__rate_interval]))", "format": "heatmap", "legendFormat": "{{le}}"}],
+      "options": {"calculate": true, "calculation": {"xBuckets": {"mode": "count", "value": "25"}, "yBuckets": {"mode": "count", "value": "50"}}, "cellGap": 1, "color": {"scheme": "Spectral", "steps": 64, "mode": "scheme"}, "yAxis": {"unit": "s", "axisPlacement": "left"}, "xAxis": {"unit": "time"}, "tooltip": {"show": true, "yHistogram": true}, "legend": {"show": true}},
+      "fieldConfig": {"defaults": {"custom": {"scaleDistribution": {"type": "linear"}, "hideFrom": {"legend": false, "tooltip": false, "viz": false}}}, "overrides": []}
+    },
+    {
+      "id": 19, "type": "timeseries", "title": "Slowest endpoints (p95)",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 35},
+      "targets": [{"refId": "A", "expr": "topk(5, histogram_quantile(0.95, sum by (le, path) (rate(flask_http_request_duration_seconds_bucket{job=\"blog-app\"}[$__rate_interval]))))", "legendFormat": "{{path}}"}],
+      "options": {"legend": {"calcs": ["lastNotNull", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "fieldConfig": {"defaults": {"unit": "s", "decimals": 4, "custom": {"drawStyle": "line", "lineInterpolation": "smooth", "lineWidth": 1, "fillOpacity": 8, "gradientMode": "opacity", "spanNulls": false, "showPoints": "never"}, "color": {"mode": "palette-classic"}}, "overrides": []}
+    },
+    {
+      "id": 20, "type": "table", "title": "Latency per endpoint (avg / p50 / p95 / p99)",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 35},
+      "targets": [
+        {"refId": "A", "expr": "sum by (path) (rate(flask_http_request_duration_seconds_sum{job=\"blog-app\"}[$__rate_interval])) / clamp_min(sum by (path) (rate(flask_http_request_duration_seconds_count{job=\"blog-app\"}[$__rate_interval])), 1)", "legendFormat": "avg", "instant": true, "format": "table"},
+        {"refId": "B", "expr": "histogram_quantile(0.50, sum by (le, path) (rate(flask_http_request_duration_seconds_bucket{job=\"blog-app\"}[$__rate_interval])))", "legendFormat": "p50", "instant": true, "format": "table"},
+        {"refId": "C", "expr": "histogram_quantile(0.95, sum by (le, path) (rate(flask_http_request_duration_seconds_bucket{job=\"blog-app\"}[$__rate_interval])))", "legendFormat": "p95", "instant": true, "format": "table"},
+        {"refId": "D", "expr": "histogram_quantile(0.99, sum by (le, path) (rate(flask_http_request_duration_seconds_bucket{job=\"blog-app\"}[$__rate_interval])))", "legendFormat": "p99", "instant": true, "format": "table"}
+      ],
+      "transformations": [
+        {"id": "joinByField", "options": {"byField": "path", "mode": "outer"}},
+        {"id": "organize", "options": {"excludeByName": {"Time": true, "Time 1": true, "Time 2": true, "Time 3": true, "Time 4": true, "__name__": true}, "renameByName": {"path": "Endpoint", "avg": "avg (s)", "p50": "p50 (s)", "p95": "p95 (s)", "p99": "p99 (s)"}}}
+      ],
+      "options": {"showHeader": true, "cellHeight": "sm"},
+      "fieldConfig": {"defaults": {"decimals": 4, "custom": {"align": "auto", "cellOptions": {"type": "auto"}}}, "overrides": []}
+    },
+
+    {"id": 21, "type": "row", "title": "📝 Business Metrics", "collapsed": false, "gridPos": {"h": 1, "w": 24, "x": 0, "y": 43}, "panels": []},
+
+    {
+      "id": 22, "type": "stat", "title": "Posts (current)",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 5, "w": 4, "x": 0, "y": 44},
+      "targets": [{"refId": "A", "expr": "sum(blog_posts_count)", "instant": true}],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "colorMode": "value", "graphMode": "none", "justifyMode": "auto", "textMode": "auto", "orientation": "auto"},
+      "fieldConfig": {"defaults": {"decimals": 0, "color": {"mode": "fixed", "fixedColor": "blue"}, "mappings": [], "thresholds": {"mode": "absolute", "steps": [{"color": "blue", "value": null}]}}, "overrides": []}
+    },
+    {
+      "id": 23, "type": "stat", "title": "Posts created (total)",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 5, "w": 4, "x": 4, "y": 44},
+      "targets": [{"refId": "A", "expr": "sum(blog_posts_created_total)", "instant": true}],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "colorMode": "value", "graphMode": "area", "justifyMode": "auto", "textMode": "auto", "orientation": "auto"},
+      "fieldConfig": {"defaults": {"decimals": 0, "color": {"mode": "fixed", "fixedColor": "green"}, "mappings": [], "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]}}, "overrides": []}
+    },
+    {
+      "id": 24, "type": "stat", "title": "Sign-ups (total)",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 5, "w": 4, "x": 8, "y": 44},
+      "targets": [{"refId": "A", "expr": "sum(blog_signups_total)", "instant": true}],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "colorMode": "value", "graphMode": "area", "justifyMode": "auto", "textMode": "auto", "orientation": "auto"},
+      "fieldConfig": {"defaults": {"decimals": 0, "color": {"mode": "fixed", "fixedColor": "purple"}, "mappings": [], "thresholds": {"mode": "absolute", "steps": [{"color": "purple", "value": null}]}}, "overrides": []}
+    },
+    {
+      "id": 25, "type": "stat", "title": "Successful logins",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 5, "w": 4, "x": 12, "y": 44},
+      "targets": [{"refId": "A", "expr": "sum(blog_logins_total)", "instant": true}],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "colorMode": "value", "graphMode": "area", "justifyMode": "auto", "textMode": "auto", "orientation": "auto"},
+      "fieldConfig": {"defaults": {"decimals": 0, "color": {"mode": "fixed", "fixedColor": "green"}, "mappings": [], "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]}}, "overrides": []}
+    },
+    {
+      "id": 26, "type": "stat", "title": "Login failures",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 5, "w": 4, "x": 16, "y": 44},
+      "targets": [{"refId": "A", "expr": "sum(blog_login_failures_total)", "instant": true}],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "colorMode": "background", "graphMode": "area", "justifyMode": "auto", "textMode": "auto", "orientation": "auto"},
+      "fieldConfig": {"defaults": {"decimals": 0, "mappings": [], "noValue": "0", "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 5}, {"color": "red", "value": 20}]}}, "overrides": []}
+    },
+    {
+      "id": 27, "type": "stat", "title": "Login success ratio",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 5, "w": 4, "x": 20, "y": 44},
+      "targets": [{"refId": "A", "expr": "sum(blog_logins_total) / clamp_min(sum(blog_logins_total) + sum(blog_login_failures_total), 1) * 100", "instant": true}],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "colorMode": "background", "graphMode": "none", "justifyMode": "auto", "textMode": "auto", "orientation": "auto"},
+      "fieldConfig": {"defaults": {"unit": "percent", "decimals": 1, "mappings": [], "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "yellow", "value": 80}, {"color": "green", "value": 95}]}}, "overrides": []}
+    },
+    {
+      "id": 28, "type": "timeseries", "title": "Sign-ups / logins / failures per minute",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 49},
+      "targets": [
+        {"refId": "A", "expr": "sum(rate(blog_signups_total[$__rate_interval])) * 60", "legendFormat": "sign-ups"},
+        {"refId": "B", "expr": "sum(rate(blog_logins_total[$__rate_interval])) * 60", "legendFormat": "logins"},
+        {"refId": "C", "expr": "sum(rate(blog_login_failures_total[$__rate_interval])) * 60", "legendFormat": "login failures"}
+      ],
+      "options": {"legend": {"calcs": ["lastNotNull", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "fieldConfig": {"defaults": {"unit": "short", "decimals": 2, "custom": {"drawStyle": "line", "lineInterpolation": "smooth", "lineWidth": 1, "fillOpacity": 12, "gradientMode": "opacity", "spanNulls": false, "showPoints": "never"}, "color": {"mode": "palette-classic"}}, "overrides": [{"matcher": {"id": "byName", "options": "login failures"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "red"}}]}]}
+    },
+    {
+      "id": 29, "type": "logs", "title": "Recent login failures (Loki)",
+      "datasource": {"type": "loki", "uid": "loki"},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 49},
+      "targets": [{"refId": "A", "expr": "{job=\"blog-app\"} |= \"LOGIN FAILED\"", "queryType": "range"}],
+      "options": {"showTime": true, "showLabels": false, "showCommonLabels": false, "wrapLines": true, "prettifyLogMessage": false, "enableLogDetails": true, "dedupStrategy": "signature", "sortOrder": "Descending"}
+    },
+
+    {"id": 30, "type": "row", "title": "🖥️ Host Resources", "collapsed": false, "gridPos": {"h": 1, "w": 24, "x": 0, "y": 57}, "panels": []},
+
+    {
+      "id": 31, "type": "timeseries", "title": "CPU utilisation",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 58},
+      "targets": [{"refId": "A", "expr": "instance:node_cpu_utilisation:rate5m", "legendFormat": "{{instance}}"}],
+      "options": {"legend": {"calcs": ["lastNotNull", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "fieldConfig": {"defaults": {"unit": "percent", "decimals": 1, "max": 100, "custom": {"drawStyle": "line", "lineInterpolation": "smooth", "lineWidth": 1, "fillOpacity": 25, "gradientMode": "opacity", "spanNulls": false, "showPoints": "never", "thresholdsStyle": {"mode": "dashed"}}, "color": {"mode": "palette-classic"}, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 70}, {"color": "red", "value": 85}]}}, "overrides": []}
+    },
+    {
+      "id": 32, "type": "gauge", "title": "Memory used",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 4, "x": 8, "y": 58},
+      "targets": [{"refId": "A", "expr": "instance:node_memory_utilisation:ratio * 100", "instant": true}],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "showThresholdLabels": false, "showThresholdMarkers": true},
+      "fieldConfig": {"defaults": {"unit": "percent", "decimals": 1, "min": 0, "max": 100, "mappings": [], "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 70}, {"color": "red", "value": 90}]}}, "overrides": []}
+    },
+    {
+      "id": 33, "type": "gauge", "title": "Root disk used",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 4, "x": 12, "y": 58},
+      "targets": [{"refId": "A", "expr": "max(instance:node_filesystem_utilisation:ratio{mountpoint=\"/\"}) * 100", "instant": true}],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "showThresholdLabels": false, "showThresholdMarkers": true},
+      "fieldConfig": {"defaults": {"unit": "percent", "decimals": 1, "min": 0, "max": 100, "mappings": [], "noValue": "n/a", "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 75}, {"color": "red", "value": 90}]}}, "overrides": []}
+    },
+    {
+      "id": 34, "type": "timeseries", "title": "Load average",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 58},
+      "targets": [
+        {"refId": "A", "expr": "node_load1", "legendFormat": "load1"},
+        {"refId": "B", "expr": "node_load5", "legendFormat": "load5"},
+        {"refId": "C", "expr": "node_load15", "legendFormat": "load15"}
+      ],
+      "options": {"legend": {"calcs": ["lastNotNull", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "fieldConfig": {"defaults": {"unit": "short", "decimals": 2, "custom": {"drawStyle": "line", "lineInterpolation": "smooth", "lineWidth": 1, "fillOpacity": 8, "gradientMode": "opacity", "spanNulls": false, "showPoints": "never"}, "color": {"mode": "palette-classic"}}, "overrides": []}
+    },
+    {
+      "id": 35, "type": "timeseries", "title": "Network throughput",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 7, "w": 8, "x": 0, "y": 66},
+      "targets": [
+        {"refId": "A", "expr": "sum(rate(node_network_receive_bytes_total{device!~\"lo|veth.*|docker.*\"}[$__rate_interval]))", "legendFormat": "receive"},
+        {"refId": "B", "expr": "sum(rate(node_network_transmit_bytes_total{device!~\"lo|veth.*|docker.*\"}[$__rate_interval]))", "legendFormat": "transmit"}
+      ],
+      "options": {"legend": {"calcs": ["lastNotNull", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "fieldConfig": {"defaults": {"unit": "Bps", "custom": {"drawStyle": "line", "lineInterpolation": "smooth", "lineWidth": 1, "fillOpacity": 12, "gradientMode": "opacity", "spanNulls": false, "showPoints": "never"}, "color": {"mode": "palette-classic"}}, "overrides": []}
+    },
+    {
+      "id": 36, "type": "timeseries", "title": "Disk I/O",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 7, "w": 8, "x": 8, "y": 66},
+      "targets": [
+        {"refId": "A", "expr": "sum(rate(node_disk_read_bytes_total[$__rate_interval]))", "legendFormat": "read"},
+        {"refId": "B", "expr": "sum(rate(node_disk_written_bytes_total[$__rate_interval]))", "legendFormat": "write"}
+      ],
+      "options": {"legend": {"calcs": ["lastNotNull", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "fieldConfig": {"defaults": {"unit": "Bps", "custom": {"drawStyle": "line", "lineInterpolation": "smooth", "lineWidth": 1, "fillOpacity": 12, "gradientMode": "opacity", "spanNulls": false, "showPoints": "never"}, "color": {"mode": "palette-classic"}}, "overrides": []}
+    },
+    {
+      "id": 37, "type": "table", "title": "Filesystems (free space)",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 7, "w": 8, "x": 16, "y": 66},
+      "targets": [{"refId": "A", "expr": "node_filesystem_avail_bytes{fstype!~\"tmpfs|overlay|ramfs|autofs|devfs|squashfs\"}", "instant": true, "format": "table"}],
+      "transformations": [{"id": "organize", "options": {"excludeByName": {"Time": true, "__name__": true, "device": true, "fstype": true, "instance": true, "job": true}, "renameByName": {"mountpoint": "Mount", "Value": "Free"}}}],
+      "options": {"showHeader": true, "cellHeight": "sm"},
+      "fieldConfig": {"defaults": {"unit": "bytes", "custom": {"align": "auto", "cellOptions": {"type": "auto"}}}, "overrides": []}
+    },
+
+    {"id": 38, "type": "row", "title": "📦 Containers, Tunnel & Probes", "collapsed": false, "gridPos": {"h": 1, "w": 24, "x": 0, "y": 73}, "panels": []},
+
+    {
+      "id": 39, "type": "timeseries", "title": "Container CPU (% of one core)",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 74},
+      "targets": [{"refId": "A", "expr": "topk(10, docker_container_cpu_percent{name=~\"$container\"})", "legendFormat": "{{name}}"}],
+      "options": {"legend": {"calcs": ["lastNotNull", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "fieldConfig": {"defaults": {"unit": "percent", "decimals": 2, "custom": {"drawStyle": "line", "lineInterpolation": "smooth", "lineWidth": 1, "fillOpacity": 12, "gradientMode": "opacity", "spanNulls": false, "showPoints": "never"}, "color": {"mode": "palette-classic"}}, "overrides": []}
+    },
+    {
+      "id": 40, "type": "timeseries", "title": "Container memory usage",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 74},
+      "targets": [{"refId": "A", "expr": "topk(10, docker_container_memory_bytes{name=~\"$container\"})", "legendFormat": "{{name}}"}],
+      "options": {"legend": {"calcs": ["lastNotNull", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "fieldConfig": {"defaults": {"unit": "bytes", "custom": {"drawStyle": "line", "lineInterpolation": "smooth", "lineWidth": 1, "fillOpacity": 12, "gradientMode": "opacity", "spanNulls": false, "showPoints": "never"}, "color": {"mode": "palette-classic"}}, "overrides": []}
+    },
+    {
+      "id": 41, "type": "table", "title": "Container restarts & memory limit %",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 74},
+      "targets": [
+        {"refId": "A", "expr": "docker_container_restarts{name=~\"$container\"}", "legendFormat": "restarts", "instant": true, "format": "table"},
+        {"refId": "B", "expr": "docker_container_memory_percent{name=~\"$container\"}", "legendFormat": "mem %", "instant": true, "format": "table"}
+      ],
+      "transformations": [
+        {"id": "joinByField", "options": {"byField": "name", "mode": "outer"}},
+        {"id": "organize", "options": {"excludeByName": {"Time": true, "Time 1": true, "Time 2": true, "__name__": true, "image": true, "image 1": true, "job": true, "job 1": true, "instance": true, "instance 1": true}, "renameByName": {"name": "Container", "restarts": "Restarts", "mem %": "Mem % of limit"}}},
+        {"id": "sortBy", "options": {"fields": [{"field": "Restarts", "desc": true}]}}
+      ],
+      "options": {"showHeader": true, "cellHeight": "sm"},
+      "fieldConfig": {"defaults": {"custom": {"align": "auto", "cellOptions": {"type": "auto"}}}, "overrides": [{"matcher": {"id": "byName", "options": "Mem % of limit"}, "properties": [{"id": "unit", "value": "percent"}, {"id": "decimals", "value": 1}]}, {"matcher": {"id": "byName", "options": "Restarts"}, "properties": [{"id": "custom.cellOptions", "value": {"type": "color-text"}}, {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 1}, {"color": "red", "value": 3}]}}]}]}
+    },
+    {
+      "id": 42, "type": "timeseries", "title": "Cloudflare tunnel connections",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 7, "w": 8, "x": 0, "y": 82},
+      "targets": [
+        {"refId": "A", "expr": "cloudflared_tunnel_ha_connections", "legendFormat": "HA connections"},
+        {"refId": "B", "expr": "rate(cloudflared_tunnel_request_errors[$__rate_interval])", "legendFormat": "request errors/s"}
+      ],
+      "options": {"legend": {"calcs": ["lastNotNull", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "fieldConfig": {"defaults": {"decimals": 1, "custom": {"drawStyle": "line", "lineInterpolation": "smooth", "lineWidth": 1, "fillOpacity": 12, "gradientMode": "opacity", "spanNulls": false, "showPoints": "never"}, "color": {"mode": "palette-classic"}}, "overrides": [{"matcher": {"id": "byName", "options": "request errors/s"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "red"}}]}]}
+    },
+    {
+      "id": 43, "type": "stat", "title": "Public endpoint probes",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 7, "w": 8, "x": 8, "y": 82},
+      "targets": [{"refId": "A", "expr": "probe_success", "legendFormat": "{{instance}}", "instant": true}],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": true}, "colorMode": "background", "graphMode": "none", "justifyMode": "auto", "textMode": "value_and_name", "orientation": "vertical"},
+      "fieldConfig": {"defaults": {"mappings": [{"type": "value", "options": {"0": {"text": "FAIL", "color": "red", "index": 0}, "1": {"text": "PASS", "color": "green", "index": 1}}}], "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}}, "overrides": []}
+    },
+    {
+      "id": 44, "type": "timeseries", "title": "Probe duration",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 7, "w": 8, "x": 16, "y": 82},
+      "targets": [{"refId": "A", "expr": "probe_duration_seconds", "legendFormat": "{{instance}}"}],
+      "options": {"legend": {"calcs": ["lastNotNull", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "fieldConfig": {"defaults": {"unit": "s", "decimals": 3, "custom": {"drawStyle": "line", "lineInterpolation": "smooth", "lineWidth": 1, "fillOpacity": 10, "gradientMode": "opacity", "spanNulls": false, "showPoints": "never"}, "color": {"mode": "palette-classic"}}, "overrides": []}
+    },
+
+    {"id": 45, "type": "row", "title": "📜 Logs (Loki)", "collapsed": false, "gridPos": {"h": 1, "w": 24, "x": 0, "y": 89}, "panels": []},
+
+    {
+      "id": 46, "type": "timeseries", "title": "Log volume by stream",
+      "datasource": {"type": "loki", "uid": "loki"},
+      "gridPos": {"h": 7, "w": 12, "x": 0, "y": 90},
+      "targets": [{"refId": "A", "expr": "sum by (log_type) (count_over_time({job=~\"blog-app|alert-webhook\"} [$__auto]))", "legendFormat": "{{log_type}}", "queryType": "range"}],
+      "options": {"legend": {"calcs": ["lastNotNull", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "fieldConfig": {"defaults": {"unit": "short", "custom": {"drawStyle": "line", "lineInterpolation": "smooth", "lineWidth": 1, "fillOpacity": 20, "gradientMode": "opacity", "spanNulls": false, "showPoints": "never", "stacking": {"mode": "normal", "group": "A"}}, "color": {"mode": "palette-classic"}}, "overrides": []}
+    },
+    {
+      "id": 47, "type": "logs", "title": "Errors, exceptions & failures",
+      "datasource": {"type": "loki", "uid": "loki"},
+      "gridPos": {"h": 7, "w": 12, "x": 12, "y": 90},
+      "targets": [{"refId": "A", "expr": "{job=~\"blog-app|alert-webhook\"} |~ \"(?i)error|exception|traceback|failed|fatal|critical\"", "queryType": "range"}],
+      "options": {"showTime": true, "showLabels": true, "showCommonLabels": false, "wrapLines": true, "prettifyLogMessage": false, "enableLogDetails": true, "dedupStrategy": "none", "sortOrder": "Descending"}
+    },
+    {
+      "id": 48, "type": "logs", "title": "Application logs (live)",
+      "datasource": {"type": "loki", "uid": "loki"},
+      "gridPos": {"h": 10, "w": 12, "x": 0, "y": 97},
+      "targets": [{"refId": "A", "expr": "{job=\"blog-app\"}", "queryType": "range"}],
+      "options": {"showTime": true, "showLabels": false, "showCommonLabels": false, "wrapLines": true, "prettifyLogMessage": false, "enableLogDetails": true, "dedupStrategy": "none", "sortOrder": "Descending"}
+    },
+    {
+      "id": 49, "type": "logs", "title": "Alert history (webhook receiver)",
+      "datasource": {"type": "loki", "uid": "loki"},
+      "gridPos": {"h": 10, "w": 12, "x": 12, "y": 97},
+      "targets": [{"refId": "A", "expr": "{job=\"alert-webhook\"}", "queryType": "range"}],
+      "options": {"showTime": true, "showLabels": true, "showCommonLabels": false, "wrapLines": true, "prettifyLogMessage": true, "enableLogDetails": true, "dedupStrategy": "none", "sortOrder": "Descending"}
+    },
+
+    {"id": 50, "type": "row", "title": "🚨 Alerts", "collapsed": false, "gridPos": {"h": 1, "w": 24, "x": 0, "y": 107}, "panels": []},
+
+    {
+      "id": 51, "type": "alertlist", "title": "Alertmanager alerts",
+      "datasource": {"type": "alertmanager", "uid": "alertmanager"},
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 108},
+      "options": {"alertName": "", "dashboardAlerts": false, "groupBy": [], "maxItems": 20, "sortOrder": 1, "stateFilter": {"firing": true, "pending": true, "noData": true, "normal": true, "error": true}, "viewMode": "list"}
+    },
+    {
+      "id": 52, "type": "table", "title": "Firing alerts (Prometheus)",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 108},
+      "targets": [{"refId": "A", "expr": "ALERTS{alertstate=\"firing\"}", "instant": true, "format": "table"}],
+      "transformations": [{"id": "organize", "options": {"excludeByName": {"Time": true, "Value": true, "__name__": true, "alertstate": true}, "renameByName": {"alertname": "Alert", "severity": "Severity", "service": "Service", "instance": "Instance"}}}],
+      "options": {"showHeader": true, "cellHeight": "sm"},
+      "fieldConfig": {"defaults": {"custom": {"align": "auto", "cellOptions": {"type": "auto"}}}, "overrides": [{"matcher": {"id": "byName", "options": "Severity"}, "properties": [{"id": "custom.cellOptions", "value": {"type": "color-text"}}, {"id": "mappings", "value": [{"type": "value", "options": {"critical": {"color": "red", "index": 0}, "warning": {"color": "yellow", "index": 1}, "info": {"color": "blue", "index": 2}}}]}]}]}
+    },
+    {
+      "id": 53, "type": "text", "title": "Alert rules & runbook",
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 108},
+      "options": {"mode": "markdown", "content": "### Alert rules\n**critical**\n- `AppDown` — scrape fails for 1m\n- `AppHighLatencyP99` — p99 > 3s for 5m\n- `HostDown` — node-exporter missing 2m\n- `HostDiskSpaceCritical` — root disk > 93%\n- `TunnelNoConnections` — cloudflared HA connections < 1\n- `BlackboxProbeFailed` — public probe failing 2m\n\n**warning**\n- `AppHighErrorRate` — 5xx > 5% for 2m\n- `AppHighLatencyP95` — p95 > 1s for 5m\n- `AppLoginFailureSpike` — > 5 failures / 15m\n- `HostHighCpu` / `HostHighMemory` / `HostHighLoad`\n- `HostDiskSpaceLow` / `HostDiskWillFillIn24h`\n- `ContainerRestartLoop` / `ContainerHighCpu` / `ContainerHighMemory`\n- `BlackboxProbeSlow`, `AlertmanagerDown`, `LokiDown`\n\n**info**\n- `AppNoTraffic` — no requests for 15m\n\n---\n**Triage**\n1. `make logs` — app logs\n2. `make tunnel-status` — tunnel + public endpoints\n3. `make ps` — container status\n4. Logs row → filter `ERROR`\n\n**Silence:** https://alerts.tavesglobal.com"}
+    }
+  ]
+}

@@ -1,8 +1,44 @@
+import logging
+import os
+
 from flask import Flask, request, jsonify, render_template, redirect, url_for, session
+from prometheus_client import Counter, Gauge
+from prometheus_flask_exporter import PrometheusMetrics
 from werkzeug.security import generate_password_hash, check_password_hash
 
+# ---------------- LOGGING ----------------
+LOG_FILE = os.getenv("LOG_FILE")
+
+log_handlers = [logging.StreamHandler()]
+if LOG_FILE:
+    os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
+    log_handlers.append(logging.FileHandler(LOG_FILE))
+
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO"),
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    handlers=log_handlers,
+)
+logger = logging.getLogger("blog")
+
 app = Flask(__name__)
-app.secret_key = "blog-posts-manager-secret-key"
+app.secret_key = os.getenv("SECRET_KEY", "blog-posts-manager-secret-key")
+
+# ---------------- METRICS ----------------
+# Exposes /metrics: per-endpoint request totals, durations, exceptions
+# plus the default process/GC collectors.
+metrics = PrometheusMetrics(app)
+metrics.info(
+    "blog_app_info",
+    "Blog Posts Manager application info",
+    version=os.getenv("APP_VERSION", "dev"),
+)
+
+posts_created_total = Counter("blog_posts_created_total", "Total blog posts created")
+signups_total = Counter("blog_signups_total", "Total user signups")
+logins_total = Counter("blog_logins_total", "Total successful logins")
+login_failures_total = Counter("blog_login_failures_total", "Total failed login attempts")
+posts_gauge = Gauge("blog_posts_count", "Current number of blog posts")
 
 # ---------------- USERS ----------------
 users = []
@@ -16,6 +52,8 @@ posts = [
         "author": "Admin"
     }
 ]
+
+posts_gauge.set(len(posts))
 
 
 # ---------------- HOME / DASHBOARD ----------------
@@ -43,6 +81,7 @@ def signup():
         # Check existing email
         for user in users:
             if user["email"] == email:
+                logger.warning("SIGNUP REJECTED email=%s reason=already_registered", email)
                 return "Email already registered!"
 
         new_user = {
@@ -52,6 +91,8 @@ def signup():
         }
 
         users.append(new_user)
+        signups_total.inc()
+        logger.info("SIGNUP email=%s name=%s", email, name)
 
         return redirect(url_for("login"))
 
@@ -73,8 +114,13 @@ def login():
                 session["user"] = user["name"]
                 session["email"] = user["email"]
 
+                logins_total.inc()
+                logger.info("LOGIN OK email=%s ip=%s", email, request.remote_addr)
+
                 return redirect(url_for("home"))
 
+        login_failures_total.inc()
+        logger.warning("LOGIN FAILED email=%s ip=%s", email, request.remote_addr)
         return "Invalid email or password!"
 
     return render_template("login.html")
@@ -112,6 +158,11 @@ def add_item():
     }
 
     posts.append(new_post)
+    posts_created_total.inc()
+    posts_gauge.set(len(posts))
+    logger.info(
+        "POST CREATED id=%s title=%s author=%s", new_post["id"], new_post["title"], new_post["author"]
+    )
 
     return jsonify(new_post), 201
 
@@ -123,4 +174,4 @@ def health():
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")))

@@ -26,3 +26,15 @@ Checks whether the application is running.
 
 ## R2 Role
 Developer & Version Control
+
+## Observability & Deployment
+
+A full local observability stack (Prometheus, Grafana, Loki, Alertmanager,
+blackbox probes), Cloudflare tunnel and the local auto-deploy pipeline are
+documented in [OBSERVABILITY.md](OBSERVABILITY.md).
+
+```bash
+make up          # build + start app + monitoring stack
+make deploy      # test -> build -> deploy -> healthcheck (+ rollback)
+make tunnel-up   # expose blog/grafana/alerts.tavesglobal.com
+```
