@@ -27,6 +27,8 @@ scrape_configs:
       - targets: ["node-exporter:9100"]
 
   - job_name: docker-metrics
+    scrape_interval: 30s
+    scrape_timeout: 25s
     static_configs:
       - targets: ["docker-metrics:9417"]
 

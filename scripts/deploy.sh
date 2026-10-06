@@ -38,17 +38,18 @@ trap 'rm -f "$LOCK"' EXIT
 log "deploy $RUN_ID starting (git $SHA)"
 log ".env present: $([ -f .env ] && echo yes || echo 'NO — copy .env.example to .env')"
 
-# ---------- stage 1: test ----------
-log "stage 1/5 — running tests in Docker"
-docker build -q --target test -t "$IMAGE:test" --build-arg APP_VERSION="$SHA" . >/dev/null
-
-# ---------- stage 2: build ----------
-log "stage 2/5 — building $IMAGE:$SHA"
+# ---------- stage 1: build ----------
+log "stage 1/5 — building $IMAGE:$SHA"
+export APP_VERSION="$SHA"
 if docker image inspect "$IMAGE:latest" >/dev/null 2>&1; then
   docker tag "$IMAGE:latest" "$IMAGE:previous"
   log "saved rollback image as $IMAGE:previous"
 fi
 docker build -q --target runtime -t "$IMAGE:latest" -t "$IMAGE:$SHA" --build-arg APP_VERSION="$SHA" . >/dev/null
+
+# ---------- stage 2: test ----------
+log "stage 2/5 — running tests with the configured Supabase environment"
+docker compose run --rm --no-deps -T app python -m pytest -q
 
 # ---------- stage 3: dependencies ----------
 log "stage 3/5 — starting observability stack"

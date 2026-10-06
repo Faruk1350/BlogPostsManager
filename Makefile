@@ -33,10 +33,11 @@ logs-all: ## Follow logs of every service
 	$(COMPOSE) logs -f --tail=50
 
 # ---------------------------------------------------------------- pipeline
-test: ## Run the test suite in Docker
-	docker build --target test -t blog-app:test .
+test: ## Run the test suite in the app container (uses .env / Supabase)
+	$(COMPOSE) build app
+	$(COMPOSE) run --rm --no-deps -T app python -m pytest -q
 
-build: ## Build the runtime image
+build: ## Build the runtime image (includes the frontend build)
 	docker build --target runtime -t blog-app:latest .
 
 deploy: ## Full local pipeline: test -> build -> deploy -> healthcheck -> rollback

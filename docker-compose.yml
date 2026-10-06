@@ -20,10 +20,12 @@ services:
     ports:
       - "127.0.0.1:5055:5000"
     environment:
-      LOG_LEVEL: INFO
-      SECRET_KEY: ${SECRET_KEY:-blog-posts-manager-secret-key}
+      SUPABASE_URL: ${SUPABASE_URL:?set SUPABASE_URL in .env}
+      SUPABASE_KEY: ${SUPABASE_KEY:?set SUPABASE_KEY in .env}
+      APP_VERSION: ${APP_VERSION:-dev}
     volumes:
       - logs:/var/log/blog
+      - uploads:/app/backend/uploads
     deploy:
       resources:
         limits:
@@ -195,6 +197,7 @@ services:
 
 volumes:
   logs:
+  uploads:
   prometheus-data:
   grafana-data:
   loki-data:

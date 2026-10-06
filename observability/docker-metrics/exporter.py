@@ -19,6 +19,9 @@ from prometheus_client import CONTENT_TYPE_LATEST, Gauge, generate_latest
 
 INTERVAL = float(os.getenv("SCRAPE_INTERVAL", "15"))
 DOCKER_HOST = os.getenv("DOCKER_HOST", "unix:///var/run/docker.sock")
+# Only containers whose name starts with this prefix are exported. Set to an
+# empty string to export every container on the daemon (slower collection).
+SCOPE_PREFIX = os.getenv("EXPORTER_CONTAINER_PREFIX", "blog-")
 
 client = DockerClient(base_url=DOCKER_HOST)
 
@@ -107,6 +110,8 @@ def _collect_container(container):
 def collect():
     """One collection pass. Returns the set of (name, image) seen."""
     containers = client.containers.list(all=True)
+    if SCOPE_PREFIX:
+        containers = [container for container in containers if container.name.startswith(SCOPE_PREFIX)]
     with ThreadPoolExecutor(max_workers=16) as pool:
         return set(pool.map(_collect_container, containers))
 
@@ -140,7 +145,7 @@ class MetricsServer(ThreadingHTTPServer):
 if __name__ == "__main__":
     server = MetricsServer(("127.0.0.1", 9417), MetricsHandler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
-    print(f"docker-metrics exporter on 127.0.0.1:9417 (interval {INTERVAL}s)", flush=True)
+    print(f"docker-metrics exporter on 127.0.0.1:9417 (interval {INTERVAL}s, scope '{SCOPE_PREFIX or 'all'}')", flush=True)
 
     previous = set()
     while True:

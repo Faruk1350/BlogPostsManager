@@ -28,8 +28,10 @@ tunnel on `tavesglobal.com`. Everything runs on this machine; nothing is pushed.
                                  (shared docker volume)
 ```
 
-- **app** — Flask + gunicorn, instrumented with `prometheus-flask-exporter`
-  (`/metrics`) and structured logging to a shared volume.
+- **app** — FastAPI + Uvicorn, instrumented with `prometheus-fastapi-instrumentator`
+  (`/metrics`) plus business counters for posts/likes/comments/shares/uploads.
+  The built React frontend is served by the same service at `/`; logs go to a
+  shared docker volume.
 - **prometheus** — scrapes app, node-exporter, blackbox probes, cloudflared,
   the host container-metrics exporter, and evaluates alerting/recording rules.
 - **alertmanager** — routes alerts to a local webhook receiver; UI proxied by
@@ -41,7 +43,8 @@ tunnel on `tavesglobal.com`. Everything runs on this machine; nothing is pushed.
 - **node-exporter** — host (Colima VM) CPU/memory/disk/network.
 - **host-metrics** — small host-side exporter that reads the Docker API
   (cAdvisor is not usable on macOS runtimes; Colima cannot share its socket
-  into containers).
+  into containers). Exports containers named `blog-*` by default; set
+  `EXPORTER_CONTAINER_PREFIX=""` to export every container.
 - **cloudflared** — host-side tunnel, metrics on `127.0.0.1:60123`.
 
 ## URLs
@@ -85,9 +88,11 @@ make hooks-uninstall    # disable auto-deploy
 
 `scripts/deploy.sh` is the single pipeline entrypoint:
 
-1. **test** — builds the `test` Docker stage (runs `pytest` in-image)
-2. **build** — builds `blog-app:<git-sha>` and tags `latest` (previous `latest`
-   is saved as `blog-app:previous`)
+1. **build** — builds the runtime image (frontend + backend) as
+   `blog-app:<git-sha>` and tags `latest`; the previous `latest` is saved as
+   `blog-app:previous`
+2. **test** — runs `pytest` in the app container with the real `.env`
+   (integration tests against Supabase, self-cleaning)
 3. **dependencies** — `docker compose up -d` for the observability stack
 4. **deploy** — recreates only the `app` container
 5. **healthcheck** — polls `http://127.0.0.1:5055/health` for up to 90s;
@@ -114,7 +119,7 @@ Loki). Alertmanager supervises grouping, inhibition and silences.
 | Severity | Alerts |
 |---|---|
 | critical | AppDown, AppHighLatencyP99, HostDown, HostDiskSpaceCritical, TunnelNoConnections, BlackboxProbeFailed |
-| warning | AppHighErrorRate, AppHighLatencyP95, AppLoginFailureSpike, AppHighMemory, HostHighCpu, HostHighMemory, HostHighLoad, HostDiskSpaceLow, HostDiskWillFillIn24h, ContainerRestartLoop, ContainerHighCpu, ContainerHighMemory, BlackboxProbeSlow, AlertmanagerDown, LokiDown, DockerMetricsExporterDown |
+| warning | AppHighErrorRate, AppHighLatencyP95, AppHighMemory, HostHighCpu, HostHighMemory, HostHighLoad, HostDiskSpaceLow, HostDiskWillFillIn24h, ContainerRestartLoop, ContainerHighCpu, ContainerHighMemory, BlackboxProbeSlow, AlertmanagerDown, LokiDown, DockerMetricsExporterDown |
 | info | AppNoTraffic |
 
 Test end-to-end delivery with `make alert-test`, then check the dashboard
@@ -127,8 +132,9 @@ Test end-to-end delivery with `make alert-test`, then check the dashboard
 - **Dashboard**: `observability/grafana/dashboards/blog-observability.json`,
   auto-provisioned into the `Blog` folder. Dashboard JSON is the source of
   truth; UI edits are disabled (`allowUiUpdates: false`).
-- **Metrics accuracy**: gunicorn runs `--workers 1 --threads 4` so Prometheus
-  counters are not split across worker processes.
+- **Metrics accuracy**: Uvicorn runs a single worker (`--workers 1`) so
+  Prometheus counters are not split across processes. FastAPI runs sync
+  endpoints in a threadpool, so concurrency is unaffected.
 - **cAdvisor**: unsupported on macOS container runtimes; replaced by
   `observability/docker-metrics/exporter.py` running on the host.
 - **Redeploying Grafana provisioning changes**: `docker compose restart grafana`.

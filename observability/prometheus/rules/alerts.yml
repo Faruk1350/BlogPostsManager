@@ -57,17 +57,6 @@ groups:
           summary: "p99 latency above 3s ({{ $value | humanizeDuration }})"
           description: "Tail latency is critically high."
 
-      - alert: AppLoginFailureSpike
-        expr: increase(blog_login_failures_total{job="blog-app"}[15m]) > 5
-        for: 5m
-        labels:
-          severity: warning
-          service: blog-app
-        annotations:
-          summary: "Login failure spike ({{ $value }} failures in 15m)"
-          description: "Possible brute-force attempt against /login."
-          runbook: "Check Loki: {job=\"blog-app\"} |= \"LOGIN FAILED\""
-
       - alert: AppHighMemory
         expr: process_resident_memory_bytes{job="blog-app"} > 512 * 1024 * 1024
         for: 10m
