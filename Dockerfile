@@ -16,14 +16,17 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     APP_VERSION=${APP_VERSION} \
     PORT=5000 \
-    FASTEMBED_CACHE_PATH=/app/.models
+    HOME=/home/appuser \
+    FASTEMBED_CACHE_PATH=/app/.models \
+    HF_HOME=/app/.models/hf \
+    HF_HUB_DISABLE_XET=1
 
 WORKDIR /app
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-RUN useradd --system --uid 10001 appuser \
+RUN useradd --system --uid 10001 --create-home appuser \
     && mkdir -p /var/log/blog /app/backend/uploads /app/.models \
     && chown -R appuser:appuser /var/log/blog /app/backend/uploads /app/.models
 
