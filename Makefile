@@ -33,9 +33,9 @@ logs-all: ## Follow logs of every service
 	$(COMPOSE) logs -f --tail=50
 
 # ---------------------------------------------------------------- pipeline
-test: ## Run the test suite in the app container (uses .env / Supabase)
-	$(COMPOSE) build app
-	$(COMPOSE) run --rm --no-deps -T app python -m pytest -q
+test: ## Run the test suite in Docker against the configured Supabase
+	docker build --target test -t blog-app:test .
+	docker run --rm --env-file .env blog-app:test python -m pytest -q test_app.py -p no:cacheprovider
 
 build: ## Build the runtime image (includes the frontend build)
 	docker build --target runtime -t blog-app:latest .

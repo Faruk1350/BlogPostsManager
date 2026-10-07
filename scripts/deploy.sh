@@ -49,7 +49,9 @@ docker build -q --target runtime -t "$IMAGE:latest" -t "$IMAGE:$SHA" --build-arg
 
 # ---------- stage 2: test ----------
 log "stage 2/5 — running tests with the configured Supabase environment"
-docker compose run --rm --no-deps -T app python -m pytest -q
+docker build -q --target test -t "$IMAGE:test" --build-arg APP_VERSION="$SHA" . >/dev/null
+docker run --rm --env-file .env -e APP_VERSION="$SHA" "$IMAGE:test" \
+  python -m pytest -q test_app.py -p no:cacheprovider
 
 # ---------- stage 3: dependencies ----------
 log "stage 3/5 — starting observability stack"

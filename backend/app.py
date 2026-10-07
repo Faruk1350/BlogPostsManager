@@ -1,4 +1,5 @@
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, Request
@@ -7,7 +8,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from prometheus_fastapi_instrumentator import Instrumentator
 
-from backend import metrics
+from backend import database, metrics
 from backend.database import DatabaseUnavailable
 from backend.routes.health import health_router
 from backend.routes.items import posts_router
@@ -18,10 +19,22 @@ BASE_DIR = Path(__file__).resolve().parent
 FRONTEND_DIST = BASE_DIR.parent / "frontend" / "dist"
 UPLOAD_DIR = BASE_DIR / "uploads"
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Seed gauges that only change on traffic (never block startup on the DB).
+    try:
+        database.refresh_post_count()
+    except Exception:
+        pass
+    yield
+
+
 app = FastAPI(
     title="Blog Posts Manager API",
     description="Modern, Asynchronous Blog API powered by FastAPI and Supabase",
     version="2.0.0",
+    lifespan=lifespan,
 )
 
 metrics.app_info.info({"version": os.getenv("APP_VERSION", "dev")})
@@ -35,6 +48,25 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# ---------------- Cache headers ----------------
+# Hashed build assets can be cached forever (at the Cloudflare edge and in the
+# browser); HTML must always be revalidated so a deploy can never leave users
+# on a stale index.html referencing old assets.
+@app.middleware("http")
+async def cache_control(request: Request, call_next):
+    response = await call_next(request)
+    path = request.url.path
+
+    if path.startswith("/assets/"):
+        response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    elif path.startswith("/uploads/"):
+        response.headers["Cache-Control"] = "public, max-age=86400"
+    elif path == "/" or path.endswith(".html"):
+        response.headers["Cache-Control"] = "no-cache"
+
+    return response
 
 
 # ---------------- Error handling ----------------

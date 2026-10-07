@@ -37,22 +37,13 @@ def _fail(action: str, exc: Exception) -> DatabaseUnavailable:
     return DatabaseUnavailable(f"{action} failed: {exc}")
 
 
-def _refresh_post_count() -> None:
+def refresh_post_count() -> None:
     """Keep the posts gauge in sync. Metrics must never break a request."""
     try:
         result = _db().table("posts").select("id", count="exact").execute()
         metrics.posts_gauge.set(result.count or 0)
     except Exception:
         logger.debug("post count refresh failed", exc_info=True)
-
-
-def _liked_post_ids(user_id: str) -> set:
-    try:
-        result = _db().table("likes").select("post_id").eq("user_id", user_id).execute()
-        return {row["post_id"] for row in (result.data or [])}
-    except Exception:
-        logger.debug("like lookup failed", exc_info=True)
-        return set()
 
 
 def calculate_read_time(content: str) -> str:
@@ -75,9 +66,13 @@ def get_posts(
     sort: str = "recent",
     current_user_id: str = "user_admin",
 ) -> List[Dict[str, Any]]:
-    """Return posts with optional search, category filter and sorting."""
+    """Return posts with optional search, category filter and sorting.
+
+    Likes are embedded in the same PostgREST call, so listing posts costs a
+    single database round-trip instead of one per concern.
+    """
     try:
-        query = _db().table("posts").select("*")
+        query = _db().table("posts").select("*, likes(user_id)")
 
         if category and category.lower() != "all":
             query = query.eq("category", category)
@@ -90,11 +85,10 @@ def get_posts(
         query = query.order("likes_count" if sort == "likes" else "created_at", desc=True)
         posts = query.execute().data or []
 
-        liked = _liked_post_ids(current_user_id)
         for post in posts:
-            post["is_liked"] = post["id"] in liked
+            likes = post.pop("likes", None) or []
+            post["is_liked"] = any(like.get("user_id") == current_user_id for like in likes)
 
-        _refresh_post_count()
         return posts
     except DatabaseUnavailable:
         raise
@@ -105,13 +99,18 @@ def get_posts(
 def get_post_by_id(post_id: int, current_user_id: str = "user_admin") -> Optional[Dict[str, Any]]:
     try:
         result = (
-            _db().table("posts").select("*").eq("id", post_id).limit(1).execute()
+            _db()
+            .table("posts")
+            .select("*, likes(user_id)")
+            .eq("id", post_id)
+            .limit(1)
+            .execute()
         )
         if not result.data:
             return None
         post = result.data[0]
-        liked = _liked_post_ids(current_user_id)
-        post["is_liked"] = post["id"] in liked
+        likes = post.pop("likes", None) or []
+        post["is_liked"] = any(like.get("user_id") == current_user_id for like in likes)
         return post
     except DatabaseUnavailable:
         raise
@@ -152,7 +151,7 @@ def create_post(data: Dict[str, Any]) -> Dict[str, Any]:
     post["is_liked"] = False
     logger.info("post_created id=%s title=%s author=%s", post["id"], post["title"], post["author_name"])
     metrics.post_events.labels(action="created").inc()
-    _refresh_post_count()
+    refresh_post_count()
     return post
 
 
@@ -169,7 +168,7 @@ def delete_post(post_id: int) -> bool:
 
     logger.info("post_deleted id=%s", post_id)
     metrics.post_events.labels(action="deleted").inc()
-    _refresh_post_count()
+    refresh_post_count()
     return True
 
 
@@ -320,36 +319,12 @@ def delete_comment(comment_id: int) -> bool:
 # Profiles
 # --------------------------------------------------------------------------
 
-def _profile_with_stats(profile: Dict[str, Any], post_stats: Dict[str, Dict[str, int]]) -> Dict[str, Any]:
-    stats = post_stats.get(profile["id"], {})
-    profile = dict(profile)
-    profile["posts_count"] = stats.get("posts_count", 0)
-    profile["likes_received"] = stats.get("likes_received", 0)
-    return profile
-
-
-def _post_stats_by_author() -> Dict[str, Dict[str, int]]:
-    stats: Dict[str, Dict[str, int]] = {}
-    try:
-        result = _db().table("posts").select("author_id,likes_count").execute()
-    except Exception as exc:
-        raise _fail("Loading profile stats", exc) from exc
-
-    for row in result.data or []:
-        author_id = row.get("author_id")
-        if not author_id:
-            continue
-        entry = stats.setdefault(author_id, {"posts_count": 0, "likes_received": 0})
-        entry["posts_count"] += 1
-        entry["likes_received"] += row.get("likes_count") or 0
-    return stats
-
-
 def get_profile(identifier: str) -> Optional[Dict[str, Any]]:
+    """Single round-trip: the profile_stats view computes post/like totals."""
     try:
         result = (
             _db()
-            .table("profiles")
+            .table("profile_stats")
             .select("*")
             .or_(f"id.eq.{identifier},username.eq.{identifier}")
             .limit(1)
@@ -360,21 +335,18 @@ def get_profile(identifier: str) -> Optional[Dict[str, Any]]:
     except Exception as exc:
         raise _fail("Loading profile", exc) from exc
 
-    if not result.data:
-        return None
-    return _profile_with_stats(result.data[0], _post_stats_by_author())
+    return result.data[0] if result.data else None
 
 
 def get_all_profiles() -> List[Dict[str, Any]]:
     try:
-        result = _db().table("profiles").select("*").execute()
+        result = _db().table("profile_stats").select("*").execute()
     except DatabaseUnavailable:
         raise
     except Exception as exc:
         raise _fail("Loading profiles", exc) from exc
 
-    stats = _post_stats_by_author()
-    return [_profile_with_stats(profile, stats) for profile in (result.data or [])]
+    return result.data or []
 
 
 def update_profile(profile_id: str, updates: Dict[str, Any]) -> Dict[str, Any]:
