@@ -108,7 +108,8 @@ blackbox probes), Cloudflare tunnel and the local auto-deploy pipeline are
 documented in [OBSERVABILITY.md](OBSERVABILITY.md).
 
 ```bash
+./deploy.sh      # one-command deploy: build -> test -> deploy -> healthcheck (+ rollback)
+                 #   --pull to update first, --logs to follow logs after
 make up          # build + start app + monitoring stack
-make deploy      # test -> build -> deploy -> healthcheck (+ rollback)
 make tunnel-up   # expose blog/grafana/alerts.tavesglobal.com
 ```
