@@ -22,10 +22,12 @@ services:
     environment:
       SUPABASE_URL: ${SUPABASE_URL:?set SUPABASE_URL in .env}
       SUPABASE_KEY: ${SUPABASE_KEY:?set SUPABASE_KEY in .env}
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
       APP_VERSION: ${APP_VERSION:-dev}
     volumes:
       - logs:/var/log/blog
       - uploads:/app/backend/uploads
+      - models:/app/.models
     deploy:
       resources:
         limits:
@@ -205,6 +207,7 @@ services:
 volumes:
   logs:
   uploads:
+  models:
   prometheus-data:
   grafana-data:
   loki-data:

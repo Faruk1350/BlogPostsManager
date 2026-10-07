@@ -119,8 +119,13 @@ Loki). Alertmanager supervises grouping, inhibition and silences.
 | Severity | Alerts |
 |---|---|
 | critical | AppDown, AppHighLatencyP99, HostDown, HostDiskSpaceCritical, TunnelNoConnections, BlackboxProbeFailed |
-| warning | AppHighErrorRate, AppHighLatencyP95, AppHighMemory, HostHighCpu, HostHighMemory, HostHighLoad, HostDiskSpaceLow, HostDiskWillFillIn24h, ContainerRestartLoop, ContainerHighCpu, ContainerHighMemory, BlackboxProbeSlow, AlertmanagerDown, LokiDown, DockerMetricsExporterDown |
+| warning | AppHighErrorRate, AppHighLatencyP95, AppHighMemory, AppLoginFailureSpike, HostHighCpu, HostHighMemory, HostHighLoad, HostDiskSpaceLow, HostDiskWillFillIn24h, ContainerRestartLoop, ContainerHighCpu, ContainerHighMemory, BlackboxProbeSlow, AlertmanagerDown, LokiDown, DockerMetricsExporterDown |
 | info | AppNoTraffic |
+
+Auth events (`blog_auth_events_total{action=…}`) cover signup, login, failed
+login, logout, token refresh and password changes; the dashboard's Business
+Metrics row shows failed logins and the alert fires above five failures in
+15 minutes.
 
 Test end-to-end delivery with `make alert-test`, then check the dashboard
 "Alert history" panel or `curl http://127.0.0.1:9099/alerts`.

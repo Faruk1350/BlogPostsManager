@@ -1,5 +1,5 @@
 import React from "react";
-import { Heart, MessageSquare, Share2, Clock, Trash2 } from "lucide-react";
+import { Heart, MessageSquare, Share2, Clock, Trash2, Pencil, Eye } from "lucide-react";
 
 export default function PostCard({
   post,
@@ -8,9 +8,10 @@ export default function PostCard({
   onOpenShare,
   onOpenProfile,
   onDeletePost,
+  onEditPost,
   currentUser
 }) {
-  const isAuthor = currentUser && currentUser.id === post.author_id;
+  const isAuthor = Boolean(currentUser && currentUser.id === post.author_id);
 
   const formatDate = (isoString) => {
     if (!isoString) return "Recently";
@@ -27,7 +28,7 @@ export default function PostCard({
   };
 
   return (
-    <article className="blog-card">
+    <article className={`blog-card ${post.status === "draft" ? "is-draft" : ""}`}>
       {/* Cover Image */}
       {post.cover_image && (
         <div className="card-image-wrap" onClick={() => onOpenReader(post)}>
@@ -43,6 +44,7 @@ export default function PostCard({
           {post.category && (
             <span className="category-tag">{post.category}</span>
           )}
+          {post.status === "draft" && <span className="card-draft-flag">Draft</span>}
         </div>
       )}
 
@@ -67,6 +69,19 @@ export default function PostCard({
 
           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
             <span className="card-date">{formatDate(post.created_at)}</span>
+            {isAuthor && onEditPost && (
+              <button
+                className="action-btn"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEditPost(post);
+                }}
+                title="Edit story"
+                style={{ padding: "0.2rem" }}
+              >
+                <Pencil size={14} />
+              </button>
+            )}
             {isAuthor && onDeletePost && (
               <button
                 className="action-btn"
@@ -77,7 +92,7 @@ export default function PostCard({
                 title="Delete story"
                 style={{ padding: "0.2rem" }}
               >
-                <Trash2 size={14} color="#94a3b8" />
+                <Trash2 size={14} />
               </button>
             )}
           </div>
@@ -138,6 +153,12 @@ export default function PostCard({
               <Share2 size={16} strokeWidth={2} />
               <span>{post.shares_count || 0}</span>
             </button>
+
+            {/* Views */}
+            <span className="action-btn action-btn-static" title="Views">
+              <Eye size={16} strokeWidth={2} />
+              <span>{post.views_count || 0}</span>
+            </span>
           </div>
 
           {/* Reading Time */}
@@ -150,3 +171,4 @@ export default function PostCard({
     </article>
   );
 }
+

@@ -10,5 +10,8 @@ if git rev-parse --verify -q ORIG_HEAD >/dev/null 2>&1; then
   echo "$changed" | grep -qE '^(app\.py|requirements\.txt|Dockerfile|docker-compose\.yml|\.dockerignore|backend/|frontend/|observability/|scripts/|\.githooks/)' || exit 0
   echo "[auto-deploy] deploy-relevant changes merged — starting pipeline in background"
   echo "[auto-deploy] log: .pipeline/deploy-*.log"
-  nohup scripts/deploy.sh >/dev/null 2>&1 &
+  LABEL="com.tavesglobal.blog-deploy"
+  launchctl remove "$LABEL" >/dev/null 2>&1 || true
+  launchctl submit -l "$LABEL" -- /bin/bash -lc "cd '$root' && exec ./scripts/deploy.sh" >/dev/null 2>&1 \
+    || nohup scripts/deploy.sh >/dev/null 2>&1 &
 fi

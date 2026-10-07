@@ -1,14 +1,19 @@
 import React from "react";
-import { Feather, Search, Plus, Database, Sparkles } from "lucide-react";
+import { Feather, Search, Plus, Settings, LogOut, LogIn } from "lucide-react";
+
+import { useAuth } from "../lib/auth";
 
 export default function Navbar({
   searchTerm,
   setSearchTerm,
   onOpenCreate,
   onOpenProfile,
-  currentUser,
-  dbStatus
+  onOpenSettings,
+  onSignIn,
+  onLogout,
 }) {
+  const { profile, isAuthenticated, isAdmin } = useAuth();
+
   return (
     <header className="navbar">
       <div className="nav-content">
@@ -34,39 +39,41 @@ export default function Navbar({
 
         {/* Actions */}
         <div className="nav-actions">
-          {/* Database indicator */}
-          <div
-            className={`status-badge ${dbStatus.connected ? "supabase" : "local"}`}
-            title={
-              dbStatus.connected
-                ? "Connected directly to Supabase cloud PostgreSQL"
-                : "Operating in Local Demo DB. Configure SUPABASE_URL and SUPABASE_KEY in backend/.env to connect."
-            }
-          >
-            <span className="status-dot" />
-            <span>{dbStatus.connected ? "Supabase" : "Local DB"}</span>
-          </div>
+          {isAuthenticated && (
+            <button className="btn-primary" onClick={onOpenCreate}>
+              <Plus size={16} strokeWidth={2.5} />
+              <span>Write</span>
+            </button>
+          )}
 
-          {/* Write Button */}
-          <button className="btn-primary" onClick={onOpenCreate}>
-            <Plus size={16} strokeWidth={2.5} />
-            <span>Write</span>
-          </button>
+          {isAuthenticated ? (
+            <>
+              <button
+                className="profile-pill"
+                onClick={() => onOpenProfile(profile.id)}
+                title={`${profile.display_name}${isAdmin ? " (admin)" : ""}`}
+              >
+                <img
+                  src={profile.avatar_url || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100"}
+                  alt={profile.display_name}
+                  className="profile-avatar-sm"
+                />
+                <span className="profile-name-sm">{profile.display_name.split(" ")[0]}</span>
+                {isAdmin && <span className="admin-dot" title="Administrator" />}
+              </button>
 
-          {/* Profile Pill */}
-          {currentUser && (
-            <div
-              className="profile-pill"
-              onClick={onOpenProfile}
-              title={`Logged in as ${currentUser.display_name}`}
-            >
-              <img
-                src={currentUser.avatar_url || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100"}
-                alt={currentUser.display_name}
-                className="profile-avatar-sm"
-              />
-              <span className="profile-name-sm">{currentUser.display_name.split(" ")[0]}</span>
-            </div>
+              <button className="icon-btn" onClick={onOpenSettings} title="Settings">
+                <Settings size={17} />
+              </button>
+              <button className="icon-btn" onClick={onLogout} title="Sign out">
+                <LogOut size={17} />
+              </button>
+            </>
+          ) : (
+            <button className="btn-primary" onClick={onSignIn}>
+              <LogIn size={16} strokeWidth={2.5} />
+              <span>Sign in</span>
+            </button>
           )}
         </div>
       </div>

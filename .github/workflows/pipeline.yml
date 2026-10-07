@@ -24,6 +24,8 @@ jobs:
           # against Supabase. Without them, data tests are skipped.
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          # CI-only signing key (tokens are minted and verified in-process).
+          JWT_SECRET: ${{ secrets.JWT_SECRET || 'ci-jwt-secret-not-for-production' }}
         run: pytest -q
 
   build:

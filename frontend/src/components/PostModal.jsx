@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from "react";
-import { X, Heart, Share2, MessageSquare, Clock, Send, Trash2 } from "lucide-react";
+import { X, Heart, Share2, MessageSquare, Clock, Send, Trash2, Pencil, Eye, Sparkles } from "lucide-react";
+
+import { api } from "../lib/api";
+import { useAuth } from "../lib/auth";
 
 export default function PostModal({
   post,
@@ -8,64 +11,70 @@ export default function PostModal({
   onLike,
   onOpenShare,
   onOpenProfile,
-  currentUser,
+  onEditPost,
+  onDeletePost,
+  onOpenReader,
+  onRequireAuth,
   showToast
 }) {
+  const { profile, isAuthenticated, isAdmin } = useAuth();
   const [comments, setComments] = useState([]);
   const [newComment, setNewComment] = useState("");
   const [loadingComments, setLoadingComments] = useState(false);
   const [submittingComment, setSubmittingComment] = useState(false);
+  const [related, setRelated] = useState([]);
 
   useEffect(() => {
-    if (isOpen && post) {
-      fetchComments();
-    }
-  }, [isOpen, post]);
+    if (!isOpen || !post) return;
+    let cancelled = false;
+
+    (async () => {
+      setLoadingComments(true);
+      try {
+        const [commentsData, relatedData] = await Promise.all([
+          api(`/api/posts/${post.id}/comments`),
+          api(`/api/posts/${post.id}/related`).catch(() => []),
+        ]);
+        if (!cancelled) {
+          setComments(commentsData || []);
+          setRelated(relatedData || []);
+        }
+      } catch (err) {
+        if (!cancelled) console.error("Failed to load reader data", err);
+      } finally {
+        if (!cancelled) setLoadingComments(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, post?.id]);
 
   if (!isOpen || !post) return null;
 
-  const fetchComments = async () => {
-    setLoadingComments(true);
-    try {
-      const res = await fetch(`/api/posts/${post.id}/comments`);
-      if (res.ok) {
-        const data = await res.json();
-        setComments(data);
-      }
-    } catch (err) {
-      console.error("Failed to fetch comments", err);
-    } finally {
-      setLoadingComments(false);
-    }
-  };
+  const isAuthor = Boolean(profile && profile.id === post.author_id) || isAdmin;
 
-  const handleAddComment = async (e) => {
-    e.preventDefault();
+  const handleAddComment = async (event) => {
+    event.preventDefault();
+    if (!isAuthenticated) {
+      onRequireAuth?.();
+      return;
+    }
     if (!newComment.trim() || submittingComment) return;
 
     setSubmittingComment(true);
     try {
-      const res = await fetch(`/api/posts/${post.id}/comments`, {
+      const created = await api(`/api/posts/${post.id}/comments`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          content: newComment.trim(),
-          author_id: currentUser?.id || "user_admin",
-          author_name: currentUser?.display_name || "Faruk Developer",
-          author_avatar: currentUser?.avatar_url || ""
-        })
+        body: { content: newComment.trim() },
       });
-
-      if (res.ok) {
-        const created = await res.json();
-        setComments((prev) => [...prev, created]);
-        setNewComment("");
-        post.comments_count = (post.comments_count || 0) + 1;
-        showToast("Comment posted successfully!");
-      }
+      setComments((prev) => [...prev, created]);
+      setNewComment("");
+      post.comments_count = (post.comments_count || 0) + 1;
+      showToast?.("Comment posted!");
     } catch (err) {
-      console.error("Failed to post comment", err);
-      showToast("Error posting comment");
+      showToast?.(err.detail || "Could not post comment.");
     } finally {
       setSubmittingComment(false);
     }
@@ -73,25 +82,22 @@ export default function PostModal({
 
   const handleDeleteComment = async (commentId) => {
     try {
-      const res = await fetch(`/api/comments/${commentId}`, { method: "DELETE" });
-      if (res.ok) {
-        setComments((prev) => prev.filter((c) => c.id !== commentId));
-        post.comments_count = Math.max(0, (post.comments_count || 1) - 1);
-        showToast("Comment deleted.");
-      }
+      await api(`/api/comments/${commentId}`, { method: "DELETE" });
+      setComments((prev) => prev.filter((comment) => comment.id !== commentId));
+      post.comments_count = Math.max(0, (post.comments_count || 1) - 1);
+      showToast?.("Comment deleted.");
     } catch (err) {
-      console.error("Failed to delete comment", err);
+      showToast?.(err.detail || "Could not delete comment.");
     }
   };
 
   const formatDate = (isoString) => {
     if (!isoString) return "Recently";
     try {
-      const d = new Date(isoString);
-      return d.toLocaleDateString("en-US", {
+      return new Date(isoString).toLocaleDateString("en-US", {
         month: "short",
         day: "numeric",
-        year: "numeric"
+        year: "numeric",
       });
     } catch {
       return "Recently";
@@ -100,23 +106,32 @@ export default function PostModal({
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div
-        className="modal-content large"
-        onClick={(e) => e.stopPropagation()}
-        style={{ padding: 0 }}
-      >
-        {/* Close Button Floating */}
-        <div
-          style={{
-            position: "absolute",
-            top: "1rem",
-            right: "1rem",
-            zIndex: 10
-          }}
-        >
+      <div className="modal-content large" onClick={(e) => e.stopPropagation()} style={{ padding: 0 }}>
+        {/* Floating actions */}
+        <div className="reader-float-actions">
+          {isAuthor && onEditPost && (
+            <button
+              className="close-btn"
+              title="Edit story"
+              style={{ backgroundColor: "var(--bg-elevated-strong)" }}
+              onClick={() => onEditPost(post)}
+            >
+              <Pencil size={16} />
+            </button>
+          )}
+          {isAuthor && onDeletePost && (
+            <button
+              className="close-btn"
+              title="Delete story"
+              style={{ backgroundColor: "var(--bg-elevated-strong)" }}
+              onClick={() => onDeletePost(post.id)}
+            >
+              <Trash2 size={16} />
+            </button>
+          )}
           <button
             className="close-btn"
-            style={{ backgroundColor: "rgba(255, 255, 255, 0.9)" }}
+            style={{ backgroundColor: "var(--bg-elevated-strong)" }}
             onClick={onClose}
           >
             <X size={18} />
@@ -138,23 +153,27 @@ export default function PostModal({
 
         {/* Reader Content Body */}
         <div className="reader-content">
-          {/* Category & Read Time */}
           <div className="reader-meta-row">
             {post.category && (
               <span className="category-tag" style={{ position: "static" }}>
                 {post.category}
               </span>
             )}
+            {post.status === "draft" && (
+              <span className="draft-badge">Draft — only visible to you</span>
+            )}
             <div className="read-time-pill">
               <Clock size={13} />
               <span>{post.read_time || "3 min read"}</span>
             </div>
+            <div className="read-time-pill" title="Views">
+              <Eye size={13} />
+              <span>{post.views_count || 0}</span>
+            </div>
           </div>
 
-          {/* Title */}
           <h1 className="reader-title">{post.title}</h1>
 
-          {/* Author Details */}
           <div className="card-author-row" style={{ margin: "0.5rem 0 1rem" }}>
             <div
               className="card-author-info"
@@ -164,10 +183,7 @@ export default function PostModal({
               }}
             >
               <img
-                src={
-                  post.author_avatar ||
-                  "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100"
-                }
+                src={post.author_avatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100"}
                 alt={post.author_name}
                 className="card-author-avatar"
                 style={{ width: "36px", height: "36px" }}
@@ -178,11 +194,10 @@ export default function PostModal({
               </div>
             </div>
 
-            {/* Like & Share Action Buttons */}
             <div className="card-actions">
               <button
                 className={`action-btn ${post.is_liked ? "liked" : ""}`}
-                onClick={() => onLike(post.id)}
+                onClick={() => (isAuthenticated ? onLike(post.id) : onRequireAuth?.())}
               >
                 <Heart
                   size={18}
@@ -194,7 +209,7 @@ export default function PostModal({
 
               <button
                 className="action-btn"
-                onClick={() => onOpenShare(post)}
+                onClick={() => (isAuthenticated ? onOpenShare(post) : onRequireAuth?.())}
               >
                 <Share2 size={18} strokeWidth={2} />
                 <span>{post.shares_count || 0}</span>
@@ -202,9 +217,32 @@ export default function PostModal({
             </div>
           </div>
 
-          {/* Full Text Body */}
           <div className="reader-body">{post.content}</div>
         </div>
+
+        {/* Related stories */}
+        {related.length > 0 && (
+          <div className="related-section">
+            <div className="comments-header">
+              <Sparkles size={17} />
+              <span>Related stories</span>
+            </div>
+            <div className="related-grid">
+              {related.map((item) => (
+                <button key={item.id} className="related-card" onClick={() => onOpenReader(item)}>
+                  {item.cover_image && <img src={item.cover_image} alt={item.title} loading="lazy" />}
+                  <div className="related-body">
+                    <span className="related-category">{item.category}</span>
+                    <span className="related-title">{item.title}</span>
+                    <span className="related-meta">
+                      {item.author_name} · {item.read_time}
+                    </span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Comments Section */}
         <div className="comments-section">
@@ -213,88 +251,70 @@ export default function PostModal({
             <span>Comments ({comments.length})</span>
           </div>
 
-          {/* Comment Form */}
-          <form className="comment-input-row" onSubmit={handleAddComment}>
-            <img
-              src={
-                currentUser?.avatar_url ||
-                "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100"
-              }
-              alt={currentUser?.display_name || "User"}
-              className="comment-avatar"
-            />
-            <div className="comment-field-wrap">
-              <textarea
-                className="comment-input"
-                placeholder="Join the discussion... Share your thoughts."
-                value={newComment}
-                onChange={(e) => setNewComment(e.target.value)}
-                rows={2}
+          {isAuthenticated ? (
+            <form className="comment-input-row" onSubmit={handleAddComment}>
+              <img
+                src={profile?.avatar_url || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100"}
+                alt={profile?.display_name || "User"}
+                className="comment-avatar"
               />
-              <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                <button
-                  type="submit"
-                  className="btn-primary"
-                  disabled={submittingComment || !newComment.trim()}
-                  style={{
-                    padding: "0.45rem 1rem",
-                    fontSize: "0.825rem",
-                    opacity: !newComment.trim() ? 0.6 : 1
-                  }}
-                >
-                  <Send size={14} />
-                  <span>{submittingComment ? "Posting..." : "Post Comment"}</span>
-                </button>
+              <div className="comment-field-wrap">
+                <textarea
+                  className="comment-input"
+                  placeholder="Join the discussion... Share your thoughts."
+                  value={newComment}
+                  onChange={(e) => setNewComment(e.target.value)}
+                  rows={2}
+                />
+                <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                  <button
+                    type="submit"
+                    className="btn-primary"
+                    disabled={submittingComment || !newComment.trim()}
+                    style={{ padding: "0.45rem 1rem", fontSize: "0.825rem" }}
+                  >
+                    <Send size={14} />
+                    <span>{submittingComment ? "Posting..." : "Post Comment"}</span>
+                  </button>
+                </div>
               </div>
+            </form>
+          ) : (
+            <div className="comment-signin">
+              <span>Join the discussion</span>
+              <button className="btn-primary" onClick={() => onRequireAuth?.()}>
+                Sign in to comment
+              </button>
             </div>
-          </form>
+          )}
 
-          {/* Comments List */}
           <div className="comment-list">
             {loadingComments ? (
-              <div style={{ color: "var(--text-muted)", fontSize: "0.9rem" }}>
-                Loading conversation...
-              </div>
+              <div style={{ color: "var(--text-muted)", fontSize: "0.9rem" }}>Loading conversation...</div>
             ) : comments.length === 0 ? (
               <div style={{ color: "var(--text-muted)", fontSize: "0.9rem" }}>
                 No comments yet. Be the first to share your perspective!
               </div>
             ) : (
-              comments.map((c) => (
-                <div key={c.id} className="comment-item">
+              comments.map((comment) => (
+                <div key={comment.id} className="comment-item">
                   <img
-                    src={
-                      c.author_avatar ||
-                      "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100"
-                    }
-                    alt={c.author_name}
+                    src={comment.author_avatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100"}
+                    alt={comment.author_name}
                     className="comment-avatar"
                   />
                   <div className="comment-item-body">
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center"
-                      }}
-                    >
-                      <span className="comment-author-name">{c.author_name}</span>
-                      <span className="comment-timestamp">
-                        {formatDate(c.created_at)}
-                      </span>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <span className="comment-author-name">{comment.author_name}</span>
+                      <span className="comment-timestamp">{formatDate(comment.created_at)}</span>
                     </div>
-                    <p className="comment-text">{c.content}</p>
-                    {currentUser &&
-                      (currentUser.id === c.author_id ||
-                        currentUser.display_name === c.author_name) && (
-                        <button
-                          className="comment-delete-btn"
-                          onClick={() => handleDeleteComment(c.id)}
-                        >
-                          <Trash2 size={12} style={{ display: "inline", marginRight: "3px" }} />
-                          Delete
-                        </button>
-                      )}
+                    <p className="comment-text">{comment.content}</p>
+                    {(isAdmin || (profile && profile.id === comment.author_id)) && (
+                      <button className="comment-delete-btn" onClick={() => handleDeleteComment(comment.id)}>
+                        <Trash2 size={12} style={{ display: "inline", marginRight: "3px" }} />
+                        Delete
+                      </button>
+                    )}
                   </div>
                 </div>
               ))

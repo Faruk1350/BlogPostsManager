@@ -3,9 +3,10 @@ import shutil
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
 from backend import metrics
+from backend.security import CurrentUser, get_current_user
 
 upload_router = APIRouter(prefix="/api", tags=["Uploads"])
 
@@ -15,7 +16,9 @@ UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
 
 @upload_router.post("/upload")
-async def upload_file(file: UploadFile = File(...)):
+async def upload_file(
+    file: UploadFile = File(...), current: CurrentUser = Depends(get_current_user)
+):
     """Upload an image file for blog posts or user avatars."""
     ext = Path(file.filename or "").suffix.lower()
     if ext not in ALLOWED_EXTENSIONS:

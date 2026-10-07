@@ -8,6 +8,19 @@
   --bg-subtle: #f1f5f9;
   --bg-muted: #e2e8f0;
   --bg-input: #ffffff;
+  --bg-navbar: rgba(255, 255, 255, 0.88);
+  --bg-elevated-strong: rgba(255, 255, 255, 0.92);
+  --bg-warning-subtle: #fffbeb;
+  --warning-text: #b45309;
+  --warning-border: #fde68a;
+  --status-ok-bg: #ecfdf5;
+  --status-ok-text: #047857;
+  --status-ok-border: #a7f3d0;
+
+  --text-on-accent: #ffffff;
+  --danger: #e11d48;
+  --danger-bg: #fff1f2;
+  --danger-border: #fecdd3;
   
   --border-subtle: #e2e8f0;
   --border-strong: #cbd5e1;
@@ -122,4 +135,92 @@ img {
 
 ::-webkit-scrollbar-thumb:hover {
   background: var(--text-muted);
+}
+
+/* ===================================================
+   Dark theme — override the palette, keep structure
+   =================================================== */
+[data-theme="dark"] {
+  --bg-canvas: #0a101e;
+  --bg-surface: #141d31;
+  --bg-subtle: #1d2942;
+  --bg-muted: #2b3a58;
+  --bg-input: #0f1728;
+  --bg-navbar: rgba(11, 17, 32, 0.85);
+  --bg-elevated-strong: rgba(29, 41, 66, 0.92);
+  --bg-warning-subtle: #3b2d10;
+  --warning-text: #fcd34d;
+  --warning-border: #6d5518;
+  --status-ok-bg: #0e3a2c;
+  --status-ok-text: #6ee7b7;
+  --status-ok-border: #1f6f55;
+
+  --border-subtle: #24314e;
+  --border-strong: #36466a;
+  --border-focus: #60a5fa;
+
+  --text-primary: #f1f5fb;
+  --text-secondary: #c3cee0;
+  --text-muted: #93a3bd;
+  --text-inverse: #0a101e;
+
+  --accent-primary: #4f83ff;
+  --accent-primary-hover: #3b6ff0;
+  --accent-primary-light: #1b2b52;
+
+  --accent-like: #fb7185;
+  --accent-like-bg: #3a1722;
+  --accent-like-border: #7f2236;
+
+  --accent-share: #38bdf8;
+  --accent-share-bg: #0b3b55;
+
+  --accent-comment: #a5b4fc;
+  --accent-comment-bg: #292a63;
+
+  --accent-tag-tech: #17305c;
+  --accent-tag-tech-text: #bcd7ff;
+  --accent-tag-design: #37175c;
+  --accent-tag-design-text: #e7d3ff;
+  --accent-tag-lifestyle: #10402a;
+  --accent-tag-lifestyle-text: #b2f3cd;
+  --accent-tag-db: #5c2c10;
+  --accent-tag-db-text: #ffd7ae;
+
+  --danger: #fb7185;
+  --danger-bg: #3a1722;
+  --danger-border: #7f2236;
+
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.45);
+  --shadow-sm: 0 2px 6px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 8px 20px -4px rgba(0, 0, 0, 0.55);
+  --shadow-lg: 0 18px 36px -6px rgba(0, 0, 0, 0.6);
+  --shadow-modal: 0 28px 56px -14px rgba(0, 0, 0, 0.7);
+}
+
+/* Images and media shouldn't glow in dark mode. */
+[data-theme="dark"] img {
+  filter: brightness(0.92) saturate(0.95);
+}
+
+[data-theme="dark"] .reader-cover {
+  filter: brightness(0.85) saturate(0.95);
+}
+
+[data-theme="dark"] .navbar,
+[data-theme="dark"] .modal-content,
+[data-theme="dark"] .settings-card,
+[data-theme="dark"] .auth-card {
+  background: var(--bg-surface);
+}
+
+[data-theme="dark"] .category-tag,
+[data-theme="dark"] .card-draft-flag,
+[data-theme="dark"] .draft-badge {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+[data-theme="dark"] ::selection {
+  background: rgba(79, 131, 255, 0.35);
+  color: var(--text-primary);
 }
