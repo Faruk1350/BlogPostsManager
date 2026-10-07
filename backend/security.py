@@ -1,6 +1,7 @@
 """Authentication primitives: password hashing, JWTs, refresh tokens, guards."""
 
 import hashlib
+import logging
 import os
 import secrets
 from datetime import datetime, timedelta, timezone
@@ -13,8 +14,17 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from backend import database
 
+logger = logging.getLogger("blog.security")
+
 JWT_ALGORITHM = "HS256"
 JWT_SECRET = os.getenv("JWT_SECRET", "")
+if not JWT_SECRET:
+    # Local runs and CI may not define a secret. Generate an ephemeral one so
+    # the app still works; production/compose always sets JWT_SECRET (tokens
+    # would be invalidated on restart with an ephemeral key).
+    JWT_SECRET = secrets.token_hex(32)
+    logger.warning("JWT_SECRET is not set — using an ephemeral key for this process")
+
 ACCESS_TOKEN_MINUTES = int(os.getenv("ACCESS_TOKEN_MINUTES", "30"))
 REFRESH_TOKEN_DAYS = int(os.getenv("REFRESH_TOKEN_DAYS", "30"))
 
